@@ -392,5 +392,122 @@ package ""myapp"" version=""1.0.0"" {
         tokens.Should().Contain(t => t.Value == "myapp");
         tokens.Should().Contain(t => t.Value == "Alice");
     }
+
+    [Theory]
+    [InlineData("123")]
+    [InlineData("-123")]
+    [InlineData("+123")]
+    [InlineData("1_000_000")]
+    [InlineData("1_000.000_5")]
+    [InlineData("1.5E+10")]
+    [InlineData("1e29")]
+    [InlineData("1e309")]
+    [InlineData("340282366920938463463374607431768211456")]
+    [InlineData("0xff_ff")]
+    [InlineData("-0x10")]
+    [InlineData("-0o20")]
+    [InlineData("-0b10000")]
+    [InlineData("#inf")]
+    [InlineData("#-inf")]
+    [InlineData("#nan")]
+    public void Read_Number_RawTextIsSourceText(string literal)
+    {
+        var kdl = $"node {literal}";
+        using var reader = new StringReader(kdl);
+        using var kdlReader = new KdlReader(reader);
+
+        // Read node name
+        kdlReader.Read().Should().BeTrue();
+
+        // Read number
+        kdlReader.Read().Should().BeTrue();
+        kdlReader.RawText.Should().Be(literal);
+        kdl.Substring(kdlReader.Position, literal.Length).Should().Be(literal);
+    }
+
+    [Theory]
+    [InlineData("bare")]
+    [InlineData("\"quoted\"")]
+    [InlineData("\"with\\tescape\"")]
+    [InlineData("#\"raw\"#")]
+    [InlineData("##\"raw with \"# inside\"##")]
+    [InlineData("\"\"\"\n    multi\n    line\n    \"\"\"")]
+    [InlineData("#true")]
+    [InlineData("#false")]
+    [InlineData("#null")]
+    public void Read_Value_RawTextIsSourceText(string literal)
+    {
+        var kdl = $"node {literal}";
+        using var reader = new StringReader(kdl);
+        using var kdlReader = new KdlReader(reader);
+
+        // Read node name
+        kdlReader.Read().Should().BeTrue();
+
+        // Read value
+        kdlReader.Read().Should().BeTrue();
+        kdlReader.RawText.Should().Be(literal);
+        kdl.Substring(kdlReader.Position, literal.Length).Should().Be(literal);
+    }
+
+    [Fact]
+    public void Read_QuotedNodeNameAndPropertyKey_RawTextIsSourceText()
+    {
+        var kdl = "\"my node\" \"my key\"=1";
+        using var reader = new StringReader(kdl);
+        using var kdlReader = new KdlReader(reader);
+
+        // Read node name
+        kdlReader.Read().Should().BeTrue();
+        kdlReader.RawText.Should().Be("\"my node\"");
+
+        // Read property key
+        kdlReader.Read().Should().BeTrue();
+        kdlReader.RawText.Should().Be("\"my key\"");
+        kdl.Substring(kdlReader.Position, "\"my key\"".Length).Should().Be("\"my key\"");
+    }
+
+    [Fact]
+    public void Read_QuotedTypeAnnotation_RawTextIsSourceText()
+    {
+        var kdl = "(\"my type\")value";
+        using var reader = new StringReader(kdl);
+        using var kdlReader = new KdlReader(reader);
+
+        // Read opening paren
+        kdlReader.Read().Should().BeTrue();
+
+        // Read type name
+        kdlReader.Read().Should().BeTrue();
+        kdlReader.StringValue.Should().Be("my type");
+        kdlReader.RawText.Should().Be("\"my type\"");
+    }
+
+    [Theory]
+    [InlineData("-0x10")]
+    [InlineData("-0o20")]
+    [InlineData("-0b10000")]
+    public void Read_NegativeNonDecimalNumber_ReturnsNegativeValue(string literal)
+    {
+        using var reader = new StringReader(literal);
+        using var kdlReader = new KdlReader(reader);
+
+        kdlReader.Read().Should().BeTrue();
+        kdlReader.TokenType.Should().Be(KdlTokenType.Number);
+        kdlReader.NumberValue.Should().Be(-16);
+    }
+
+    [Theory]
+    [InlineData("1e29")]
+    [InlineData("1e308")]
+    [InlineData("340282366920938463463374607431768211456")]
+    public void Read_NumberBeyondDecimalRange_ReturnsNumberToken(string literal)
+    {
+        using var reader = new StringReader(literal);
+        using var kdlReader = new KdlReader(reader);
+
+        kdlReader.Read().Should().BeTrue();
+        kdlReader.TokenType.Should().Be(KdlTokenType.Number);
+    }
 }
 
