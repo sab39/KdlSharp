@@ -649,39 +649,18 @@ public sealed class KdlParser
         {
             TokenType.String => new KdlString(token.Text!, token.StringType, token.RawHashCount, token.IsRawMultiLine, token.RawMultiLineIndent),
             TokenType.Number => ParseNumberValue(token),
-            TokenType.True => KdlBoolean.True,
-            TokenType.False => KdlBoolean.False,
-            TokenType.Null => KdlNull.Instance,
+            // Fresh instances rather than the shared KdlBoolean/KdlNull singletons, since every parsed
+            // value carries its own source position
+            TokenType.True => new KdlBoolean(true),
+            TokenType.False => new KdlBoolean(false),
+            TokenType.Null => new KdlNull(),
             TokenType.Infinity => (double)token.Value! > 0 ? KdlNumber.PositiveInfinity() : KdlNumber.NegativeInfinity(),
             TokenType.NaN => KdlNumber.NaN(),
             _ => throw new KdlParseException($"Expected value, got {token.Type}", token.Line, token.Column)
         };
 
-        // Handle singletons carefully to avoid polluting shared state
-        var isSingleton = value == KdlBoolean.True || value == KdlBoolean.False || value == KdlNull.Instance;
-        if (isSingleton)
-        {
-            if (typeAnnotation != null)
-            {
-                // Must create a new instance to hold the annotation
-                value = token.Type switch
-                {
-                    TokenType.True => new KdlBoolean(true),
-                    TokenType.False => new KdlBoolean(false),
-                    TokenType.Null => new KdlNull(),
-                    _ => value
-                };
-                value.TypeAnnotation = typeAnnotation;
-                value.SourcePosition = new SourcePosition(token.Line, token.Column, token.Offset);
-            }
-            // For singletons without annotations, don't set any properties - use them as-is
-        }
-        else
-        {
-            // Non-singletons: safe to set properties
-            value.TypeAnnotation = typeAnnotation;
-            value.SourcePosition = new SourcePosition(token.Line, token.Column, token.Offset);
-        }
+        value.TypeAnnotation = typeAnnotation;
+        value.SourcePosition = new SourcePosition(token.Line, token.Column, token.Offset);
 
         token = lexer.NextToken();
         return value;
