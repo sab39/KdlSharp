@@ -48,13 +48,26 @@ public sealed class QueryEvaluator
     private IEnumerable<KdlNode> ExecuteSelector(Selector selector)
     {
         IEnumerable<KdlNode> currentNodes;
+        int nextSegment;
 
         // Handle first segment
         var firstSegment = selector.Segments[0];
-        currentNodes = ApplyFilter(firstSegment.Filter, GetInitialNodes(firstSegment.Filter));
+        if (firstSegment.Filter is TopFilter && firstSegment.Operator.HasValue && selector.Segments.Count > 1)
+        {
+            // Followed by an operator, top() stands for the document root itself, so the operator
+            // applies from the root: top() > a matches top-level a nodes, and top() > [] is
+            // equivalent to top() on its own.
+            currentNodes = ApplyFilter(selector.Segments[1].Filter, GetRootRelatives(firstSegment.Operator.Value));
+            nextSegment = 2;
+        }
+        else
+        {
+            currentNodes = ApplyFilter(firstSegment.Filter, GetInitialNodes(firstSegment.Filter));
+            nextSegment = 1;
+        }
 
         // Handle remaining segments
-        for (int i = 1; i < selector.Segments.Count; i++)
+        for (int i = nextSegment; i < selector.Segments.Count; i++)
         {
             var segment = selector.Segments[i];
             var prevSegment = selector.Segments[i - 1];
@@ -80,6 +93,17 @@ public sealed class QueryEvaluator
         // All other filters start from the document root
         // and can match at any level (they do a deep search)
         return GetAllNodes(document);
+    }
+
+    private IEnumerable<KdlNode> GetRootRelatives(SelectorOperator op)
+    {
+        return op switch
+        {
+            SelectorOperator.Child => document.Nodes,
+            SelectorOperator.Descendant => GetAllNodes(document),
+            // The document root has no siblings
+            _ => Array.Empty<KdlNode>()
+        };
     }
 
     private IEnumerable<KdlNode> GetAllNodes(KdlDocument document)
