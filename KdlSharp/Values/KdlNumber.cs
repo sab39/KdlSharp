@@ -15,9 +15,9 @@ public sealed class KdlNumber : KdlValue
     /// Use <see cref="IsSpecial"/>, <see cref="IsPositiveInfinity"/>, <see cref="IsNegativeInfinity"/>,
     /// or <see cref="IsNaN"/> to check for special values, or use <see cref="AsDoubleValue"/> which properly
     /// handles all IEEE 754 special values.
-    /// For non-decimal formats (hex/octal/binary) that exceed decimal range,
-    /// this may throw <see cref="OverflowException"/> when accessed.
-    /// Use <see cref="RawText"/> to get the original representation.
+    /// For parsed numbers that exceed decimal range, this throws <see cref="OverflowException"/> when accessed.
+    /// Precision beyond what <see cref="decimal"/> can hold is rounded.
+    /// Use <see cref="AsDoubleValue"/> for the nearest double, or <see cref="RawText"/> to get the original representation.
     /// </remarks>
     public decimal Value
     {
@@ -57,7 +57,7 @@ public sealed class KdlNumber : KdlValue
 
     private string? rawText;
 
-    // Text the value of a non-decimal number is parsed from: its prefix and digits, without underscores.
+    // Text a parsed number's value is computed from: the source text without underscores.
     private readonly string? valueText;
 
     /// <summary>
@@ -97,7 +97,7 @@ public sealed class KdlNumber : KdlValue
     }
 
     /// <summary>
-    /// Initializes a new number value from raw text (for hex/octal/binary).
+    /// Initializes a new number value from normalized number text, as produced by the lexer.
     /// </summary>
     internal KdlNumber(string rawText, KdlNumberFormat format)
     {
@@ -152,6 +152,8 @@ public sealed class KdlNumber : KdlValue
     {
         if (IsSpecial)
             return specialValue;
+        if (valueText != null)
+            return NumberParser.ParseDouble(valueText);
         return (double)Value;
     }
 
@@ -179,12 +181,40 @@ public sealed class KdlNumber : KdlValue
 
         return Format switch
         {
-            KdlNumberFormat.Decimal => Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            KdlNumberFormat.Decimal => FormatDecimal(),
             KdlNumberFormat.Hexadecimal => TryConvertToInt64() is long hexVal ? $"0x{hexVal:X}" : Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
             KdlNumberFormat.Octal => TryConvertToInt64() is long octVal ? $"0o{Convert.ToString(octVal, 8)}" : Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
             KdlNumberFormat.Binary => TryConvertToInt64() is long binVal ? $"0b{Convert.ToString(binVal, 2)}" : Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
             _ => Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
         };
+    }
+
+    private string FormatDecimal()
+    {
+        // Beyond decimal's range, the normalized text is still valid KDL
+        return TryGetDecimalValue(out var decimalValue)
+            ? decimalValue.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : valueText!;
+    }
+
+    /// <summary>
+    /// Gets the value as a decimal, unless this is a special value or a parsed number beyond decimal range.
+    /// </summary>
+    internal bool TryGetDecimalValue(out decimal decimalValue)
+    {
+        decimalValue = 0;
+        if (IsSpecial)
+            return false;
+
+        try
+        {
+            decimalValue = Value;
+            return true;
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
     }
 
     private long? TryConvertToInt64()
@@ -204,12 +234,7 @@ public sealed class KdlNumber : KdlValue
         if (valueText == null)
             throw new InvalidOperationException("Cannot parse number without raw text");
 
-        if (NumberParser.TryParseNonDecimal(valueText, out var decimalValue))
-        {
-            return decimalValue;
-        }
-
-        throw new InvalidOperationException($"Cannot parse number from raw text: {valueText}");
+        return NumberParser.ParseDecimal(valueText);
     }
 
     /// <summary>

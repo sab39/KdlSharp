@@ -869,6 +869,8 @@ internal sealed class Lexer
             Advance();
         }
 
+        var signLength = tokenBuilder.Length;
+
         // Check for hex/octal/binary
         if (Peek() == '0' && !IsAtEnd())
         {
@@ -906,7 +908,7 @@ internal sealed class Lexer
                     Advance();
                 }
 
-                if (tokenBuilder.Length == 0)
+                if (tokenBuilder.Length == signLength)
                 {
                     throw new KdlParseException("Hexadecimal number must have at least one digit", startLine, startColumn);
                 }
@@ -920,7 +922,7 @@ internal sealed class Lexer
                 }
 
                 // Store hex string and base info for later conversion
-                var hexText = "0x" + tokenBuilder.ToString();
+                var hexText = tokenBuilder.Insert(signLength, "0x").ToString();
                 return new Token(TokenType.Number, startLine, startColumn, start, hexText, hexText);
             }
             else if (next == 'o' || next == 'O')
@@ -956,7 +958,7 @@ internal sealed class Lexer
                     Advance();
                 }
 
-                if (tokenBuilder.Length == 0)
+                if (tokenBuilder.Length == signLength)
                 {
                     throw new KdlParseException("Octal number must have at least one digit", startLine, startColumn);
                 }
@@ -970,7 +972,7 @@ internal sealed class Lexer
                 }
 
                 // Store octal string and base info for later conversion
-                var octalText = "0o" + tokenBuilder.ToString();
+                var octalText = tokenBuilder.Insert(signLength, "0o").ToString();
                 return new Token(TokenType.Number, startLine, startColumn, start, octalText, octalText);
             }
             else if (next == 'b' || next == 'B')
@@ -1006,7 +1008,7 @@ internal sealed class Lexer
                     Advance();
                 }
 
-                if (tokenBuilder.Length == 0)
+                if (tokenBuilder.Length == signLength)
                 {
                     throw new KdlParseException("Binary number must have at least one digit", startLine, startColumn);
                 }
@@ -1020,7 +1022,7 @@ internal sealed class Lexer
                 }
 
                 // Store binary string and base info for later conversion
-                var binaryText = "0b" + tokenBuilder.ToString();
+                var binaryText = tokenBuilder.Insert(signLength, "0b").ToString();
                 return new Token(TokenType.Number, startLine, startColumn, start, binaryText, binaryText);
             }
         }
@@ -1119,32 +1121,10 @@ internal sealed class Lexer
                 startLine, startColumn);
         }
 
-        // Try to parse as decimal
-        var numberStr = tokenBuilder.ToString();
-        if (decimal.TryParse(numberStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalValue))
-        {
-            return new Token(TokenType.Number, startLine, startColumn, start, numberStr, decimalValue);
-        }
-
-        // If parsing failed, check if it's because the exponent is too large
-        // In that case, treat it as infinity
-        if (hasExponent && (numberStr.Contains("E") || numberStr.Contains("e")))
-        {
-            // Parse as double to see if it's infinity
-            if (double.TryParse(numberStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var doubleValue))
-            {
-                if (double.IsPositiveInfinity(doubleValue))
-                {
-                    return new Token(TokenType.Number, startLine, startColumn, start, numberStr, decimal.MaxValue);
-                }
-                else if (double.IsNegativeInfinity(doubleValue))
-                {
-                    return new Token(TokenType.Number, startLine, startColumn, start, numberStr, decimal.MinValue);
-                }
-            }
-        }
-
-        throw new KdlParseException($"Invalid number: {numberStr}", startLine, startColumn);
+        // The scan above has validated the syntax, so the number is only converted when its value is
+        // asked for. That leaves its range unlimited here, whatever type it is later converted to.
+        var numberText = tokenBuilder.ToString();
+        return new Token(TokenType.Number, startLine, startColumn, start, numberText, numberText);
     }
 
     private Token ScanNewline(int startLine, int startColumn, int start)

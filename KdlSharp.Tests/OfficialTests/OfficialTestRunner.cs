@@ -239,6 +239,20 @@ public class OfficialTestRunner
         }
     }
 
+    private static bool TryGetDecimal(KdlSharp.Values.KdlNumber number, out decimal value)
+    {
+        try
+        {
+            value = number.Value;
+            return true;
+        }
+        catch (OverflowException)
+        {
+            value = 0;
+            return false;
+        }
+    }
+
     /// <summary>
     /// Normalizes properties by keeping only the rightmost property for each key
     /// and sorting alphabetically, per the official test suite README.
@@ -275,9 +289,14 @@ public class OfficialTestRunner
                     actualNum.IsNegativeInfinity.Should().Be(expectedNum.IsNegativeInfinity, $"at {path} (negative infinity)");
                     actualNum.IsNaN.Should().Be(expectedNum.IsNaN, $"at {path} (NaN)");
                 }
+                else if (TryGetDecimal(actualNum!, out var actualValue) && TryGetDecimal(expectedNum!, out var expectedValue))
+                {
+                    actualValue.Should().BeApproximately(expectedValue, 0.0000001m, $"at {path}");
+                }
                 else
                 {
-                    actual.AsNumber().Should().BeApproximately(expected.AsNumber()!.Value, 0.0000001m, $"at {path}");
+                    // Beyond decimal range: compare as doubles
+                    actualNum!.AsDoubleValue().Should().Be(expectedNum!.AsDoubleValue(), $"at {path}");
                 }
                 break;
             case KdlValueType.Boolean:

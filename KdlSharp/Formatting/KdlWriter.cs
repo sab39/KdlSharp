@@ -303,19 +303,24 @@ public sealed class KdlWriter : IDisposable
             {
                 writer.Write("#nan");
             }
+            else if (!num.TryGetDecimalValue(out var value))
+            {
+                // Beyond decimal range: the number's own text representation
+                writer.Write(num.ToKdlString());
+            }
             else
             {
                 // Format as decimal, using scientific notation for very large/small numbers
-                var abs = Math.Abs(num.Value);
+                var abs = Math.Abs(value);
                 if (abs != 0 && (abs < 0.0001m || abs >= 1e10m))
                 {
                     // Use scientific notation
-                    var str = num.Value.ToString("E", CultureInfo.InvariantCulture);
+                    var str = value.ToString("E", CultureInfo.InvariantCulture);
                     writer.Write(str);
                 }
                 else
                 {
-                    writer.Write(num.Value.ToString(CultureInfo.InvariantCulture));
+                    writer.Write(value.ToString(CultureInfo.InvariantCulture));
                 }
             }
         }

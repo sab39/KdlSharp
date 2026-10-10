@@ -1,5 +1,6 @@
 using KdlSharp.Exceptions;
 using KdlSharp.Settings;
+using KdlSharp.Utilities;
 using KdlSharp.Values;
 
 namespace KdlSharp.Parsing;
@@ -242,7 +243,7 @@ public sealed class KdlParser
 
                 if (versionArgToken.Type == TokenType.Number)
                 {
-                    var versionNumber = (int)(decimal)versionArgToken.Value!;
+                    var versionNumber = (int)ParseNumberValue(versionArgToken).Value;
                     KdlVersion markerVersion = versionNumber switch
                     {
                         1 => KdlVersion.V1,
@@ -673,27 +674,10 @@ public sealed class KdlParser
             settings.PreserveSourceText ? lexer.Source : null);
     }
 
-    private KdlNumber ParseNumberValue(Token token)
+    private static KdlNumber ParseNumberValue(Token token)
     {
-        // Check if it's a special format based on the text
-        if (token.Value is string rawText)
-        {
-            if (rawText.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-            {
-                return new KdlNumber(rawText, KdlNumberFormat.Hexadecimal);
-            }
-            else if (rawText.StartsWith("0o", StringComparison.OrdinalIgnoreCase))
-            {
-                return new KdlNumber(rawText, KdlNumberFormat.Octal);
-            }
-            else if (rawText.StartsWith("0b", StringComparison.OrdinalIgnoreCase))
-            {
-                return new KdlNumber(rawText, KdlNumberFormat.Binary);
-            }
-        }
-
-        // Regular decimal number
-        return new KdlNumber((decimal)token.Value!);
+        var numberText = (string)token.Value!;
+        return new KdlNumber(numberText, NumberParser.GetFormat(numberText));
     }
 
     private void SkipValue(Lexer lexer, ref Token token)

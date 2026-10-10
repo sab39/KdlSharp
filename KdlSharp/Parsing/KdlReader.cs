@@ -130,7 +130,7 @@ public sealed class KdlReader : IDisposable
     /// Returns null if the current token is not a number.
     /// </summary>
     /// <remarks>
-    /// For hex/octal/binary numbers, this parses the raw text and may throw OverflowException if the number exceeds decimal range.
+    /// This parses the number's text, and throws <see cref="OverflowException"/> if the number exceeds decimal range.
     /// </remarks>
     public decimal? NumberValue
     {
@@ -138,14 +138,7 @@ public sealed class KdlReader : IDisposable
         {
             if (currentToken?.Type == Parsing.TokenType.Number)
             {
-                if (currentToken.Value is decimal num)
-                    return num;
-
-                // Handle hex/octal/binary stored as strings
-                if (currentToken.Value is string rawText)
-                {
-                    return ParseNumberFromRawText(rawText);
-                }
+                return NumberParser.ParseDecimal((string)currentToken.Value!);
             }
             if (currentToken?.Type == Parsing.TokenType.Infinity)
             {
@@ -154,17 +147,6 @@ public sealed class KdlReader : IDisposable
             }
             return null;
         }
-    }
-
-    private static decimal ParseNumberFromRawText(string rawText)
-    {
-        if (NumberParser.TryParseNonDecimal(rawText, out var decimalValue))
-        {
-            return decimalValue;
-        }
-
-        // Fall back to decimal parsing
-        return decimal.Parse(rawText, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>
