@@ -37,7 +37,19 @@ internal sealed class Lexer
         }
     }
 
+    /// <summary>
+    /// Gets the full source text being tokenized.
+    /// </summary>
+    public string Source => source;
+
     public Token NextToken()
+    {
+        var token = ScanToken();
+        token.Length = position - token.Offset;
+        return token;
+    }
+
+    private Token ScanToken()
     {
         SkipWhitespaceAndComments();
 

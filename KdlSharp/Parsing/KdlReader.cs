@@ -184,9 +184,11 @@ public sealed class KdlReader : IDisposable
     }
 
     /// <summary>
-    /// Gets the raw text representation of the current token (if available).
+    /// Gets the exact source text of the current token, or null at the start or end of the document.
     /// </summary>
-    public string? RawText => currentToken?.Text;
+    public string? RawText => currentToken is { Type: not Parsing.TokenType.EndOfFile } token
+        ? lexer!.Source.Substring(token.Offset, token.Length)
+        : null;
 
     /// <summary>
     /// Advances the reader to the next token.

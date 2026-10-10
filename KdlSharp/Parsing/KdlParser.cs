@@ -368,7 +368,7 @@ public sealed class KdlParser
         var node = new KdlNode(nodeName)
         {
             TypeAnnotation = typeAnnotation,
-            SourcePosition = new SourcePosition(token.Line, token.Column, token.Offset)
+            SourcePosition = CreatePosition(lexer, token)
         };
 
         token = lexer.NextToken();
@@ -454,7 +454,7 @@ public sealed class KdlParser
                     // It's an argument (string value)
                     // We already consumed the string token, so create the value directly
                     var value = new KdlString(possibleKey, token.StringType, token.RawHashCount, token.IsRawMultiLine, token.RawMultiLineIndent);
-                    value.SourcePosition = new SourcePosition(token.Line, token.Column, token.Offset);
+                    value.SourcePosition = CreatePosition(lexer, token);
                     node.Arguments.Add(value);
                     token = nextToken; // continue with the next token
                 }
@@ -660,12 +660,18 @@ public sealed class KdlParser
         };
 
         value.TypeAnnotation = typeAnnotation;
-        value.SourcePosition = new SourcePosition(token.Line, token.Column, token.Offset);
+        value.SourcePosition = CreatePosition(lexer, token);
 
         token = lexer.NextToken();
         return value;
     }
 
+
+    private SourcePosition CreatePosition(Lexer lexer, Token token)
+    {
+        return new SourcePosition(token.Line, token.Column, token.Offset, token.Length,
+            settings.PreserveSourceText ? lexer.Source : null);
+    }
 
     private KdlNumber ParseNumberValue(Token token)
     {

@@ -32,6 +32,16 @@ public sealed class KdlParserSettings
     public bool AllowDuplicateProperties { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether parsed values keep a reference to the source text, so that their exact
+    /// source text is available (for example through <see cref="Values.KdlNumber.RawText"/>).
+    /// </summary>
+    /// <remarks>
+    /// Default is <c>false</c>. When enabled, the whole source text stays in memory for as long as any
+    /// parsed node or value from it does.
+    /// </remarks>
+    public bool PreserveSourceText { get; set; }
+
+    /// <summary>
     /// Creates a copy of these settings.
     /// </summary>
     public KdlParserSettings Clone()
@@ -40,7 +50,8 @@ public sealed class KdlParserSettings
         {
             TargetVersion = TargetVersion,
             MaxNestingDepth = MaxNestingDepth,
-            AllowDuplicateProperties = AllowDuplicateProperties
+            AllowDuplicateProperties = AllowDuplicateProperties,
+            PreserveSourceText = PreserveSourceText
         };
     }
 }

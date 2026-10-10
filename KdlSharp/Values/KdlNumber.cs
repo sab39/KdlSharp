@@ -47,9 +47,18 @@ public sealed class KdlNumber : KdlValue
     public KdlNumberFormat Format { get; }
 
     /// <summary>
-    /// Gets the original text representation for non-decimal numbers, or null for regular decimals.
+    /// Gets the original text representation of this number.
     /// </summary>
-    public string? RawText { get; }
+    /// <remarks>
+    /// For a number parsed with <see cref="Settings.KdlParserSettings.PreserveSourceText"/>, this is the exact
+    /// source text. Otherwise it may be null, or differ from the source text.
+    /// </remarks>
+    public string? RawText => rawText ??= SourcePosition?.GetRawText() ?? valueText;
+
+    private string? rawText;
+
+    // Text the value of a non-decimal number is parsed from: its prefix and digits, without underscores.
+    private readonly string? valueText;
 
     /// <summary>
     /// Gets whether this number is a special value (infinity or NaN).
@@ -83,7 +92,7 @@ public sealed class KdlNumber : KdlValue
     {
         this.value = value;
         Format = format;
-        RawText = null;
+        valueText = null;
         specialValue = null;
     }
 
@@ -92,7 +101,7 @@ public sealed class KdlNumber : KdlValue
     /// </summary>
     internal KdlNumber(string rawText, KdlNumberFormat format)
     {
-        RawText = rawText ?? throw new ArgumentNullException(nameof(rawText));
+        valueText = rawText ?? throw new ArgumentNullException(nameof(rawText));
         Format = format;
         value = null; // Parse lazily
         specialValue = null;
@@ -105,7 +114,7 @@ public sealed class KdlNumber : KdlValue
     {
         specialValue = special;
         Format = format;
-        RawText = null;
+        valueText = null;
         value = null;
     }
 
@@ -192,15 +201,15 @@ public sealed class KdlNumber : KdlValue
 
     private decimal ParseFromRawText()
     {
-        if (RawText == null)
+        if (valueText == null)
             throw new InvalidOperationException("Cannot parse number without raw text");
 
-        if (NumberParser.TryParseNonDecimal(RawText, out var decimalValue))
+        if (NumberParser.TryParseNonDecimal(valueText, out var decimalValue))
         {
             return decimalValue;
         }
 
-        throw new InvalidOperationException($"Cannot parse number from raw text: {RawText}");
+        throw new InvalidOperationException($"Cannot parse number from raw text: {valueText}");
     }
 
     /// <summary>
@@ -213,9 +222,9 @@ public sealed class KdlNumber : KdlValue
         {
             return new KdlNumber(specialValue!.Value, Format) { TypeAnnotation = TypeAnnotation };
         }
-        if (RawText != null)
+        if (valueText != null)
         {
-            var clone = new KdlNumber(RawText, Format) { TypeAnnotation = TypeAnnotation };
+            var clone = new KdlNumber(valueText, Format) { TypeAnnotation = TypeAnnotation };
             if (value.HasValue)
                 clone.value = value;
             return clone;

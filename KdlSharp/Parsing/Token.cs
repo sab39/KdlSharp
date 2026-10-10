@@ -15,6 +15,11 @@ internal sealed class Token
     public int Offset { get; }
 
     /// <summary>
+    /// The length of the token's source text, in characters. Set by the lexer once the token has been scanned.
+    /// </summary>
+    public int Length { get; set; }
+
+    /// <summary>
     /// For string tokens, indicates the type of string (identifier, quoted, raw, multi-line).
     /// Defaults to <see cref="KdlStringType.Quoted"/> for non-string tokens.
     /// </summary>

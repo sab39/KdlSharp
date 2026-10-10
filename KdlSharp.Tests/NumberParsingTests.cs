@@ -2,6 +2,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using KdlSharp;
 using KdlSharp.Extensions;
+using KdlSharp.Settings;
 using KdlSharp.Values;
 using Xunit;
 
@@ -9,6 +10,8 @@ namespace KdlSharp.Tests;
 
 public class NumberParsingTests
 {
+    private static readonly KdlParserSettings preserveSourceText = new() { PreserveSourceText = true };
+
     [Theory]
     [InlineData("123")]
     [InlineData("-123")]
@@ -33,10 +36,10 @@ public class NumberParsingTests
     [InlineData("#inf")]
     [InlineData("#-inf")]
     [InlineData("#nan")]
-    public void Parse_Number_RawTextIsSourceText(string literal)
+    public void Parse_Number_WithPreserveSourceText_RawTextIsSourceText(string literal)
     {
         var kdl = $"node {literal}";
-        var doc = KdlDocument.Parse(kdl);
+        var doc = KdlDocument.Parse(kdl, preserveSourceText);
 
         var value = (KdlNumber)doc.Nodes[0].Arguments[0];
         value.RawText.Should().Be(literal);
@@ -50,16 +53,17 @@ public class NumberParsingTests
     [InlineData("node \"a\" 1e29 \"b\"", "1e29")]
     [InlineData("node {\n    child 1.5e10\n}", "1.5e10")]
     [InlineData("node #-inf", "#-inf")]
-    public void Parse_Number_RawTextIsAtSourcePosition(string kdl, string literal)
+    public void Parse_Number_WithPreserveSourceText_RawTextIsAtSourcePosition(string kdl, string literal)
     {
-        var doc = KdlDocument.Parse(kdl);
+        var doc = KdlDocument.Parse(kdl, preserveSourceText);
 
         var value = doc.AllNodes().SelectMany(n => n.Arguments.Concat(n.Properties.Select(p => p.Value)))
             .OfType<KdlNumber>()
             .Single();
         value.RawText.Should().Be(literal);
         value.SourcePosition.Should().NotBeNull();
-        kdl.Substring(value.SourcePosition!.Offset, literal.Length).Should().Be(literal);
+        value.SourcePosition!.Length.Should().Be(literal.Length);
+        kdl.Substring(value.SourcePosition.Offset, value.SourcePosition.Length).Should().Be(literal);
     }
 
     [Theory]

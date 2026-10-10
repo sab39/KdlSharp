@@ -19,23 +19,56 @@ public sealed class SourcePosition
     public int Column { get; }
 
     /// <summary>
-    /// Gets the byte offset in the source text.
+    /// Gets the character offset in the source text.
     /// </summary>
     public int Offset { get; }
+
+    /// <summary>
+    /// Gets the length of the source text at this position, in characters.
+    /// </summary>
+    /// <remarks>
+    /// For a value, this covers the value itself, excluding any type annotation. For a node, it covers the node name.
+    /// </remarks>
+    public int Length { get; }
+
+    /// <summary>
+    /// The full source text this position refers to, kept only when parsing with
+    /// <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
+    /// </summary>
+    private string? FullSourceText { get; }
 
     /// <summary>
     /// Initializes a new source position.
     /// </summary>
     public SourcePosition(int line, int column, int offset)
+        : this(line, column, offset, 0)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new source position with a length.
+    /// </summary>
+    public SourcePosition(int line, int column, int offset, int length)
+        : this(line, column, offset, length, null)
+    {
+    }
+
+    internal SourcePosition(int line, int column, int offset, int length, string? fullSourceText)
     {
         Line = line;
         Column = column;
         Offset = offset;
+        Length = length;
+        FullSourceText = fullSourceText;
     }
+
+    /// <summary>
+    /// Gets the exact source text at this position, or null if the source text wasn't preserved.
+    /// </summary>
+    internal string? GetRawText() => FullSourceText?.Substring(Offset, Length);
 
     /// <summary>
     /// Returns a string representation like "line 10, column 5".
     /// </summary>
     public override string ToString() => $"line {Line}, column {Column}";
 }
-
