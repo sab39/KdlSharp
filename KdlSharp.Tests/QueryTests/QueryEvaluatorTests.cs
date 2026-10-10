@@ -39,6 +39,81 @@ public class QueryEvaluatorTests
     }
 
     [Fact]
+    public void Execute_TopFilterChild_ReturnsMatchingTopLevelNodesOnly()
+    {
+        var kdl = @"
+            package {
+                package
+            }
+            version
+        ";
+        var doc = KdlDocument.Parse(kdl);
+        var results = KdlQuery.Execute(doc, "top() > package").ToList();
+
+        results.Should().HaveCount(1);
+        results[0].Should().BeSameAs(doc.Nodes[0]);
+    }
+
+    [Fact]
+    public void Execute_TopFilterChildAny_IsEquivalentToTopFilter()
+    {
+        var kdl = @"
+            package {
+                name
+            }
+            version
+        ";
+        var doc = KdlDocument.Parse(kdl);
+        var results = KdlQuery.Execute(doc, "top() > []").ToList();
+
+        results.Should().HaveCount(2);
+        results.Select(n => n.Name).Should().BeEquivalentTo(new[] { "package", "version" });
+    }
+
+    [Fact]
+    public void Execute_TopFilterChildThenDescendant_ReturnsDescendantsOfTopLevelNode()
+    {
+        // The example given for top() in the KDL Query Language spec
+        var kdl = @"
+            package {
+                name foo
+                version ""1.0.0""
+                dependencies platform=windows {
+                    winapi ""1.0.0"" path=""./crates/my-winapi-fork""
+                }
+                dependencies {
+                    miette ""2.0.0"" dev=#true integrity=(sri)sha512-deadbeef
+                }
+            }
+        ";
+        var doc = KdlDocument.Parse(kdl);
+        var results = KdlQuery.Execute(doc, "top() > package >> name").ToList();
+
+        results.Should().HaveCount(1);
+        results[0].Name.Should().Be("name");
+    }
+
+    [Fact]
+    public void Execute_TopFilterAfterUnion_ReturnsTopLevelMatches()
+    {
+        var kdl = @"
+            a {
+                b
+            }
+            b
+            c {
+                b
+            }
+        ";
+        var doc = KdlDocument.Parse(kdl);
+        var results = KdlQuery.Execute(doc, "a > b || top() > b").ToList();
+
+        results.Should().HaveCount(2);
+        results.Should().Contain(doc.Nodes[0].Children[0]);
+        results.Should().Contain(doc.Nodes[1]);
+    }
+
+    [Fact]
     public void Execute_ChildOperator_ReturnsDirectChildren()
     {
         var kdl = @"
