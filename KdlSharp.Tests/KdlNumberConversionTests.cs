@@ -51,6 +51,14 @@ public class KdlNumberConversionTests
     [InlineData("1e05", "1E+5")]
     [InlineData("1.0E-05", "1.0E-5")]
     [InlineData("1e00", "1E+0")]
+    [InlineData("-0", "-0")]
+    [InlineData("-00", "-0")]
+    [InlineData("00.5", "0.5")]
+    [InlineData("0.50", "0.50")]
+    [InlineData("1E+5", "1E+5")]
+    [InlineData("1E+05", "1E+5")]
+    [InlineData("1E-0", "1E-0")]
+    [InlineData("0e0", "0E+0")]
     [InlineData("#inf", "#inf")]
     [InlineData("#-inf", "#-inf")]
     [InlineData("#nan", "#nan")]
@@ -59,6 +67,9 @@ public class KdlNumberConversionTests
         foreach (var settings in new[] { new KdlParserSettings(), preserveSourceText })
         {
             var value = (KdlNumber)KdlDocument.Parse($"node {literal}", settings).Nodes[0].Arguments[0];
+            value.ToKdlString().Should().Be(canonical);
+
+            // Again, once whether the text is canonical has been worked out
             value.ToKdlString().Should().Be(canonical);
         }
     }

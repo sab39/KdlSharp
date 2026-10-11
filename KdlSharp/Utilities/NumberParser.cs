@@ -182,6 +182,61 @@ internal static class NumberParser
     }
 
     /// <summary>
+    /// Checks whether a normalized number text is already in the form <see cref="ToCanonical"/> gives, so that it
+    /// would come back unchanged: a decimal with no leading '+' or zeros, and any exponent written as 'E' with an
+    /// explicit sign and no leading zeros.
+    /// </summary>
+    public static bool IsCanonical(string text)
+    {
+        var i = text.Length > 0 && text[0] == '-' ? 1 : 0;
+        if (!SkipDigitsWithoutLeadingZero(text, ref i))
+        {
+            return false;
+        }
+
+        if (i < text.Length && text[i] == '.')
+        {
+            i++;
+            var fractionStart = i;
+            while (i < text.Length && text[i] is >= '0' and <= '9')
+            {
+                i++;
+            }
+            if (i == fractionStart)
+            {
+                return false;
+            }
+        }
+
+        if (i < text.Length && text[i] == 'E')
+        {
+            i++;
+            if (i >= text.Length || text[i] is not ('+' or '-'))
+            {
+                return false;
+            }
+            i++;
+            if (!SkipDigitsWithoutLeadingZero(text, ref i))
+            {
+                return false;
+            }
+        }
+
+        return i == text.Length;
+    }
+
+    // Skips one or more digits, which can only start with 0 if they're just "0"
+    private static bool SkipDigitsWithoutLeadingZero(string text, ref int i)
+    {
+        var start = i;
+        while (i < text.Length && text[i] is >= '0' and <= '9')
+        {
+            i++;
+        }
+        return i > start && (text[start] != '0' || i == start + 1);
+    }
+
+    /// <summary>
     /// Gets the normalized number text for a constructed decimal or floating-point value, from its invariant
     /// text: scientific notation with all its significant digits outside the range 1e-4 to 1e10, as KDL has
     /// always written such numbers, and the text as given within it.

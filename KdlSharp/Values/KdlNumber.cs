@@ -29,20 +29,21 @@ public sealed class KdlNumber : KdlValue
     public decimal Value => ToDecimal();
 
     private decimal? value;
-    private readonly double? specialValue;
 
     // The number as text in its format, without underscores; null for special values, and for a number
     // constructed from a decimal until ValueText first formats it
     private string? valueText;
-    private string? canonicalText;
-    private string? rawText;
+
+    // The format and the flags are bytes, so that they take up no more room together than one int would
+    private readonly StoredFormat format;
+    private NumberFlags flags;
 
     private string ValueText => valueText ??= NumberParser.FormatConstructed(value!.Value.ToString(CultureInfo.InvariantCulture), isFloatingPoint: false);
 
     /// <summary>
     /// Gets the format of this number: as parsed, or as given when it was constructed.
     /// </summary>
-    public KdlNumberFormat Format { get; }
+    public KdlNumberFormat Format => (KdlNumberFormat)format;
 
     /// <summary>
     /// Gets the text representation of this number, in its own format.
@@ -53,27 +54,27 @@ public sealed class KdlNumber : KdlValue
     /// underscores, and for a constructed one, text generated from its value. Use <see cref="ToKdlString"/>
     /// for the canonical form.
     /// </remarks>
-    public string? RawText => rawText ??= SourceText?.RawText ?? (specialValue is null ? ValueText : null);
+    public string? RawText => SourceText?.RawText ?? (IsSpecial ? null : ValueText);
 
     /// <summary>
     /// Gets whether this number is a special value (infinity or NaN).
     /// </summary>
-    public bool IsSpecial => Format == KdlNumberFormat.Infinity || Format == KdlNumberFormat.NaN;
+    public bool IsSpecial => format is StoredFormat.Infinity or StoredFormat.NaN;
 
     /// <summary>
     /// Gets whether this number is positive infinity.
     /// </summary>
-    public bool IsPositiveInfinity => Format == KdlNumberFormat.Infinity && specialValue > 0;
+    public bool IsPositiveInfinity => format == StoredFormat.Infinity && (flags & NumberFlags.Negative) == 0;
 
     /// <summary>
     /// Gets whether this number is negative infinity.
     /// </summary>
-    public bool IsNegativeInfinity => Format == KdlNumberFormat.Infinity && specialValue < 0;
+    public bool IsNegativeInfinity => format == StoredFormat.Infinity && (flags & NumberFlags.Negative) != 0;
 
     /// <summary>
     /// Gets whether this number is NaN (not a number).
     /// </summary>
-    public bool IsNaN => Format == KdlNumberFormat.NaN;
+    public bool IsNaN => format == StoredFormat.NaN;
 
     /// <summary>
     /// Gets the value type (Number).
@@ -101,7 +102,8 @@ public sealed class KdlNumber : KdlValue
         }
 
         this.value = value;
-        Format = format;
+        this.format = (StoredFormat)format;
+        flags = CanonicalKnown(format == KdlNumberFormat.Decimal);
     }
 
     /// <summary>
@@ -142,7 +144,8 @@ public sealed class KdlNumber : KdlValue
     public KdlNumber(BigInteger value, KdlNumberFormat format = KdlNumberFormat.Decimal)
     {
         valueText = NumberParser.FormatInteger(value, format);
-        Format = format;
+        this.format = (StoredFormat)format;
+        flags = CanonicalKnown(format == KdlNumberFormat.Decimal);
     }
 
     /// <summary>
@@ -155,13 +158,13 @@ public sealed class KdlNumber : KdlValue
     {
         if (float.IsNaN(value) || float.IsInfinity(value))
         {
-            specialValue = value;
-            Format = float.IsNaN(value) ? KdlNumberFormat.NaN : KdlNumberFormat.Infinity;
+            (format, flags) = Special(float.IsNaN(value), float.IsNegativeInfinity(value));
         }
         else
         {
             valueText = NumberParser.FormatConstructed(value.ToString("R", CultureInfo.InvariantCulture), isFloatingPoint: true);
-            Format = KdlNumberFormat.Decimal;
+            format = StoredFormat.Decimal;
+            flags = CanonicalKnown(true);
         }
     }
 
@@ -175,23 +178,24 @@ public sealed class KdlNumber : KdlValue
     {
         if (double.IsNaN(value) || double.IsInfinity(value))
         {
-            specialValue = value;
-            Format = double.IsNaN(value) ? KdlNumberFormat.NaN : KdlNumberFormat.Infinity;
+            (format, flags) = Special(double.IsNaN(value), double.IsNegativeInfinity(value));
         }
         else
         {
             valueText = NumberParser.FormatConstructed(value.ToString("R", CultureInfo.InvariantCulture), isFloatingPoint: true);
-            Format = KdlNumberFormat.Decimal;
+            format = StoredFormat.Decimal;
+            flags = CanonicalKnown(true);
         }
     }
 
     /// <summary>
-    /// Initializes a new number value from normalized number text, as produced by the lexer.
+    /// Initializes a new number value from normalized number text, as produced by the lexer. Whether the text is
+    /// canonical is worked out when it's first written.
     /// </summary>
     internal KdlNumber(string rawText, KdlNumberFormat format)
     {
         valueText = rawText ?? throw new ArgumentNullException(nameof(rawText));
-        Format = format;
+        this.format = (StoredFormat)format;
     }
 
     /// <summary>
@@ -292,12 +296,15 @@ public sealed class KdlNumber : KdlValue
     /// <summary>
     /// Gets this value as the nearest <see cref="float"/>, including infinities and NaN.
     /// </summary>
-    public float ToSingle() => specialValue is { } special ? (float)special : NumberParser.ParseSingle(ValueText);
+    public float ToSingle() => IsSpecial ? (float)SpecialValue : NumberParser.ParseSingle(ValueText);
 
     /// <summary>
     /// Gets this value as the nearest <see cref="double"/>, including infinities and NaN.
     /// </summary>
-    public double ToDouble() => specialValue ?? NumberParser.ParseDouble(ValueText);
+    public double ToDouble() => IsSpecial ? SpecialValue : NumberParser.ParseDouble(ValueText);
+
+    // The value of #inf, #-inf or #nan
+    private double SpecialValue => IsNaN ? double.NaN : IsNegativeInfinity ? double.NegativeInfinity : double.PositiveInfinity;
 
     /// <summary>
     /// Gets this value as a <see cref="decimal"/>. Precision beyond what <see cref="decimal"/> can hold is rounded.
@@ -347,16 +354,17 @@ public sealed class KdlNumber : KdlValue
     /// <returns>The KDL string representation.</returns>
     public override string ToKdlString()
     {
-        if (Format == KdlNumberFormat.Infinity)
+        if (IsSpecial)
         {
-            return specialValue < 0 ? "#-inf" : "#inf";
-        }
-        if (Format == KdlNumberFormat.NaN)
-        {
-            return "#nan";
+            return IsNaN ? "#nan" : IsNegativeInfinity ? "#-inf" : "#inf";
         }
 
-        return canonicalText ??= NumberParser.ToCanonical(ValueText);
+        var text = ValueText;
+        if ((flags & NumberFlags.CanonicalKnown) == 0)
+        {
+            flags |= CanonicalKnown(NumberParser.IsCanonical(text));
+        }
+        return (flags & NumberFlags.CanonicalText) != 0 ? text : NumberParser.ToCanonical(text);
     }
 
     private BigInteger ToWholeNumber(int maxDigits, BigInteger? min, BigInteger? max)
@@ -394,12 +402,49 @@ public sealed class KdlNumber : KdlValue
     /// <returns>A new KdlNumber with the same value and format.</returns>
     public override KdlValue Clone()
     {
-        if (specialValue is { } special)
+        if (IsSpecial)
         {
-            return new KdlNumber(special) { TypeAnnotation = TypeAnnotation };
+            return new KdlNumber(SpecialValue) { TypeAnnotation = TypeAnnotation };
         }
 
-        return new KdlNumber(ValueText, Format) { TypeAnnotation = TypeAnnotation, value = this.value };
+        return new KdlNumber(ValueText, Format) { TypeAnnotation = TypeAnnotation, value = this.value, flags = this.flags };
+    }
+
+    private static NumberFlags CanonicalKnown(bool isCanonical)
+    {
+        return isCanonical ? NumberFlags.CanonicalKnown | NumberFlags.CanonicalText : NumberFlags.CanonicalKnown;
+    }
+
+    private static (StoredFormat Format, NumberFlags Flags) Special(bool isNaN, bool isNegativeInfinity)
+    {
+        return isNaN ? (StoredFormat.NaN, NumberFlags.None)
+            : (StoredFormat.Infinity, isNegativeInfinity ? NumberFlags.Negative : NumberFlags.None);
+    }
+
+    // KdlNumberFormat's values, held in a byte
+    private enum StoredFormat : byte
+    {
+        Decimal = (byte)KdlNumberFormat.Decimal,
+        Hexadecimal = (byte)KdlNumberFormat.Hexadecimal,
+        Octal = (byte)KdlNumberFormat.Octal,
+        Binary = (byte)KdlNumberFormat.Binary,
+        Infinity = (byte)KdlNumberFormat.Infinity,
+        NaN = (byte)KdlNumberFormat.NaN
+    }
+
+    [Flags]
+    private enum NumberFlags : byte
+    {
+        None = 0,
+
+        // For infinity: it's negative infinity
+        Negative = 1,
+
+        // Whether CanonicalText has been worked out yet
+        CanonicalKnown = 2,
+
+        // The number's text is already canonical, so ToKdlString can return it as is
+        CanonicalText = 4
     }
 }
 
