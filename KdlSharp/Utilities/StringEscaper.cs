@@ -202,29 +202,28 @@ internal static class StringEscaper
             return false;
         }
 
-        // Check first character
-        if (!IsIdentifierStart(value[0]))
-        {
-            return false;
-        }
-
-        // Check remaining characters
-        for (int i = 1; i < value.Length; i++)
-        {
-            if (!IsIdentifierContinue(value[i]))
-            {
-                return false;
-            }
-        }
-
-        // Surrogates are allowed character by character, but only as complete pairs
+        // One pass over the characters, which can all be any identifier character (IsIdentifierStart and
+        // IsIdentifierContinue are the same): ASCII is looked up in a bit table, other characters are checked
+        // individually, and surrogates are allowed only as complete pairs
         for (int i = 0; i < value.Length; i++)
         {
-            if (char.IsHighSurrogate(value[i]) && char.IsSurrogatePair(value, i))
+            var ch = value[i];
+            if (ch < 128)
             {
+                if (IsNonIdentifierAscii(ch))
+                {
+                    return false;
+                }
+            }
+            else if (char.IsHighSurrogate(ch))
+            {
+                if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                {
+                    return false;
+                }
                 i++;
             }
-            else if (char.IsSurrogate(value[i]))
+            else if (char.IsLowSurrogate(ch) || !IsIdentifierContinue(ch))
             {
                 return false;
             }
@@ -253,6 +252,29 @@ internal static class StringEscaper
         }
 
         return index < value.Length && value[index] is >= '0' and <= '9';
+    }
+
+    // Bit tables of the ASCII characters that can't be in an identifier, for characters 0-63 and 64-127,
+    // built from IsIdentifierContinue so that the two always agree
+    private static readonly ulong nonIdentifierAsciiLow = BuildNonIdentifierAsciiTable(0);
+    private static readonly ulong nonIdentifierAsciiHigh = BuildNonIdentifierAsciiTable(64);
+
+    private static ulong BuildNonIdentifierAsciiTable(int start)
+    {
+        ulong table = 0;
+        for (int i = 0; i < 64; i++)
+        {
+            if (!IsIdentifierContinue((char)(start + i)))
+            {
+                table |= 1UL << i;
+            }
+        }
+        return table;
+    }
+
+    private static bool IsNonIdentifierAscii(char ch)
+    {
+        return ((ch < 64 ? nonIdentifierAsciiLow >> ch : nonIdentifierAsciiHigh >> (ch - 64)) & 1) != 0;
     }
 
     private static bool IsReservedKeyword(string value)
