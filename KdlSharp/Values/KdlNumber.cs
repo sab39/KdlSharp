@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 using KdlSharp.Utilities;
 
@@ -6,60 +7,50 @@ namespace KdlSharp.Values;
 /// <summary>
 /// Represents a KDL number value.
 /// </summary>
+/// <remarks>
+/// A number is held as text, either as parsed or as generated from the value it was constructed from, so it
+/// keeps its full range and precision. The conversion methods, such as <see cref="ToInt64"/>,
+/// <see cref="ToBigInteger"/> and <see cref="ToDouble"/>, convert from that text.
+/// </remarks>
 public sealed class KdlNumber : KdlValue
 {
     /// <summary>
     /// Gets the numeric value as a <see cref="decimal"/>.
     /// </summary>
     /// <remarks>
+    /// The same as <see cref="ToDecimal"/>.
     /// For special values (infinity, NaN), accessing this property will throw.
     /// Use <see cref="IsSpecial"/>, <see cref="IsPositiveInfinity"/>, <see cref="IsNegativeInfinity"/>,
-    /// or <see cref="IsNaN"/> to check for special values, or use <see cref="AsDoubleValue"/> which properly
+    /// or <see cref="IsNaN"/> to check for special values, or use <see cref="ToDouble"/> which properly
     /// handles all IEEE 754 special values.
-    /// For parsed numbers that exceed decimal range, this throws <see cref="OverflowException"/> when accessed.
+    /// For numbers that exceed decimal range, this throws <see cref="OverflowException"/> when accessed.
     /// Precision beyond what <see cref="decimal"/> can hold is rounded.
-    /// Use <see cref="AsDoubleValue"/> for the nearest double, or <see cref="RawText"/> to get the original representation.
     /// </remarks>
-    public decimal Value
-    {
-        get
-        {
-            if (Format == KdlNumberFormat.Infinity || Format == KdlNumberFormat.NaN)
-            {
-                throw new InvalidOperationException(
-                    $"Cannot represent {Format} as decimal. Use AsDouble() for special values.");
-            }
-
-            if (value.HasValue)
-                return value.Value;
-
-            // Lazy parse from raw text
-            value = ParseFromRawText();
-            return value.Value;
-        }
-    }
+    public decimal Value => ToDecimal();
 
     private decimal? value;
     private readonly double? specialValue;
 
+    // The number as text in its format, without underscores; null for special values
+    private readonly string? valueText;
+    private string? canonicalText;
+    private string? rawText;
+
     /// <summary>
-    /// Gets the original format used when parsing this number.
+    /// Gets the format of this number: as parsed, or as given when it was constructed.
     /// </summary>
     public KdlNumberFormat Format { get; }
 
     /// <summary>
-    /// Gets the original text representation of this number.
+    /// Gets the text representation of this number, in its own format.
     /// </summary>
     /// <remarks>
     /// For a number parsed with <see cref="Settings.KdlParserSettings.PreserveSourceText"/>, this is the exact
-    /// source text. Otherwise it may be null, or differ from the source text.
+    /// source text. Otherwise, it may be missing or synthesized: for a parsed number, the source text without
+    /// underscores, and for a constructed one, text generated from its value. Use <see cref="ToKdlString"/>
+    /// for the canonical form.
     /// </remarks>
     public string? RawText => rawText ??= SourceText?.RawText ?? valueText;
-
-    private string? rawText;
-
-    // Text a parsed number's value is computed from: the source text without underscores.
-    private readonly string? valueText;
 
     /// <summary>
     /// Gets whether this number is a special value (infinity or NaN).
@@ -89,12 +80,28 @@ public sealed class KdlNumber : KdlValue
     /// <summary>
     /// Initializes a new number value.
     /// </summary>
+    /// <param name="value">The value. From 1e-4 up to 1e10, it's written as is, keeping its scale, so <c>1.50m</c>
+    /// is written as <c>1.50</c>. Outside that range, it's written in scientific notation with all its significant
+    /// digits, such as <c>1.2345E+15</c>.</param>
+    /// <param name="format">The format to write the number in when number formats are preserved. Only a whole
+    /// number can be hexadecimal, octal or binary.</param>
     public KdlNumber(decimal value, KdlNumberFormat format = KdlNumberFormat.Decimal)
     {
+        if (format == KdlNumberFormat.Decimal)
+        {
+            valueText = NumberParser.FormatConstructed(value.ToString(CultureInfo.InvariantCulture), isFloatingPoint: false);
+        }
+        else
+        {
+            if (decimal.Truncate(value) != value)
+            {
+                throw new ArgumentException("Only a whole number can be written in hexadecimal, octal or binary.", nameof(value));
+            }
+            valueText = NumberParser.FormatInteger(new BigInteger(value), format);
+        }
+
         this.value = value;
         Format = format;
-        valueText = null;
-        specialValue = null;
     }
 
     /// <summary>
@@ -134,25 +141,48 @@ public sealed class KdlNumber : KdlValue
     /// <param name="format">The format to write the number in when number formats are preserved.</param>
     public KdlNumber(BigInteger value, KdlNumberFormat format = KdlNumberFormat.Decimal)
     {
-        throw new NotImplementedException();
+        valueText = NumberParser.FormatInteger(value, format);
+        Format = format;
     }
 
     /// <summary>
     /// Initializes a new floating-point value. Infinities and NaN become <c>#inf</c>, <c>#-inf</c> and <c>#nan</c>.
     /// </summary>
-    /// <param name="value">The value.</param>
+    /// <param name="value">The value. From 1e-4 up to 1e10, it's written as is, with a whole number written with a
+    /// fraction, such as <c>1.0</c>, so that it doesn't read back as an integer. Outside that range, it's written in
+    /// scientific notation with all its significant digits, such as <c>1.2345E+15</c>.</param>
     public KdlNumber(float value)
     {
-        throw new NotImplementedException();
+        if (float.IsNaN(value) || float.IsInfinity(value))
+        {
+            specialValue = value;
+            Format = float.IsNaN(value) ? KdlNumberFormat.NaN : KdlNumberFormat.Infinity;
+        }
+        else
+        {
+            valueText = NumberParser.FormatConstructed(value.ToString("R", CultureInfo.InvariantCulture), isFloatingPoint: true);
+            Format = KdlNumberFormat.Decimal;
+        }
     }
 
     /// <summary>
     /// Initializes a new floating-point value. Infinities and NaN become <c>#inf</c>, <c>#-inf</c> and <c>#nan</c>.
     /// </summary>
-    /// <param name="value">The value.</param>
+    /// <param name="value">The value. From 1e-4 up to 1e10, it's written as is, with a whole number written with a
+    /// fraction, such as <c>1.0</c>, so that it doesn't read back as an integer. Outside that range, it's written in
+    /// scientific notation with all its significant digits, such as <c>1.2345E+15</c>.</param>
     public KdlNumber(double value)
     {
-        throw new NotImplementedException();
+        if (double.IsNaN(value) || double.IsInfinity(value))
+        {
+            specialValue = value;
+            Format = double.IsNaN(value) ? KdlNumberFormat.NaN : KdlNumberFormat.Infinity;
+        }
+        else
+        {
+            valueText = NumberParser.FormatConstructed(value.ToString("R", CultureInfo.InvariantCulture), isFloatingPoint: true);
+            Format = KdlNumberFormat.Decimal;
+        }
     }
 
     /// <summary>
@@ -162,35 +192,22 @@ public sealed class KdlNumber : KdlValue
     {
         valueText = rawText ?? throw new ArgumentNullException(nameof(rawText));
         Format = format;
-        value = null; // Parse lazily
-        specialValue = null;
-    }
-
-    /// <summary>
-    /// Initializes a new special number value (infinity or NaN).
-    /// </summary>
-    private KdlNumber(double special, KdlNumberFormat format)
-    {
-        specialValue = special;
-        Format = format;
-        valueText = null;
-        value = null;
     }
 
     /// <summary>
     /// Creates a positive infinity value.
     /// </summary>
-    public static KdlNumber PositiveInfinity() => new KdlNumber(double.PositiveInfinity, KdlNumberFormat.Infinity);
+    public static KdlNumber PositiveInfinity() => new KdlNumber(double.PositiveInfinity);
 
     /// <summary>
     /// Creates a negative infinity value.
     /// </summary>
-    public static KdlNumber NegativeInfinity() => new KdlNumber(double.NegativeInfinity, KdlNumberFormat.Infinity);
+    public static KdlNumber NegativeInfinity() => new KdlNumber(double.NegativeInfinity);
 
     /// <summary>
     /// Creates a NaN (not-a-number) value.
     /// </summary>
-    public static KdlNumber NaN() => new KdlNumber(double.NaN, KdlNumberFormat.NaN);
+    public static KdlNumber NaN() => new KdlNumber(double.NaN);
 
     /// <summary>
     /// Returns this value as a decimal number.
@@ -207,91 +224,129 @@ public sealed class KdlNumber : KdlValue
     /// Attempts to get this value as a double-precision floating point number.
     /// </summary>
     /// <returns>The double value, including proper IEEE 754 special values.</returns>
-    public double? AsDoubleValue()
-    {
-        if (IsSpecial)
-            return specialValue;
-        if (valueText != null)
-            return NumberParser.ParseDouble(valueText);
-        return (double)Value;
-    }
+    public double? AsDoubleValue() => ToDouble();
 
     /// <summary>
     /// Gets this value as an <see cref="int"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">The value isn't a whole number, or is a special value.</exception>
     /// <exception cref="OverflowException">The value is outside the range of <see cref="int"/>.</exception>
-    public int ToInt32() => throw new NotImplementedException();
+    public int ToInt32() => (int)ToWholeNumber(10, int.MinValue, int.MaxValue);
 
     /// <summary>
     /// Gets this value as an <see cref="int"/>, if it's a whole number within its range.
     /// </summary>
-    public bool TryGetInt32(out int result) => throw new NotImplementedException();
+    public bool TryGetInt32(out int result)
+    {
+        var success = GetWholeNumber(10, int.MinValue, int.MaxValue, out var wholeNumber) == null;
+        result = success ? (int)wholeNumber : 0;
+        return success;
+    }
 
     /// <summary>
     /// Gets this value as a <see cref="long"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">The value isn't a whole number, or is a special value.</exception>
     /// <exception cref="OverflowException">The value is outside the range of <see cref="long"/>.</exception>
-    public long ToInt64() => throw new NotImplementedException();
+    public long ToInt64() => (long)ToWholeNumber(19, long.MinValue, long.MaxValue);
 
     /// <summary>
     /// Gets this value as a <see cref="long"/>, if it's a whole number within its range.
     /// </summary>
-    public bool TryGetInt64(out long result) => throw new NotImplementedException();
+    public bool TryGetInt64(out long result)
+    {
+        var success = GetWholeNumber(19, long.MinValue, long.MaxValue, out var wholeNumber) == null;
+        result = success ? (long)wholeNumber : 0;
+        return success;
+    }
 
     /// <summary>
     /// Gets this value as a <see cref="ulong"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">The value isn't a whole number, or is a special value.</exception>
     /// <exception cref="OverflowException">The value is outside the range of <see cref="ulong"/>.</exception>
-    public ulong ToUInt64() => throw new NotImplementedException();
+    public ulong ToUInt64() => (ulong)ToWholeNumber(20, ulong.MinValue, ulong.MaxValue);
 
     /// <summary>
     /// Gets this value as a <see cref="ulong"/>, if it's a whole number within its range.
     /// </summary>
-    public bool TryGetUInt64(out ulong result) => throw new NotImplementedException();
+    public bool TryGetUInt64(out ulong result)
+    {
+        var success = GetWholeNumber(20, ulong.MinValue, ulong.MaxValue, out var wholeNumber) == null;
+        result = success ? (ulong)wholeNumber : 0;
+        return success;
+    }
 
     /// <summary>
     /// Gets this value as a <see cref="BigInteger"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">The value isn't a whole number, or is a special value.</exception>
-    public BigInteger ToBigInteger() => throw new NotImplementedException();
+    /// <exception cref="OverflowException">The value has too many digits to compute.</exception>
+    public BigInteger ToBigInteger() => ToWholeNumber(int.MaxValue, null, null);
 
     /// <summary>
     /// Gets this value as a <see cref="BigInteger"/>, if it's a whole number.
     /// </summary>
-    public bool TryGetBigInteger(out BigInteger result) => throw new NotImplementedException();
+    public bool TryGetBigInteger(out BigInteger result) => GetWholeNumber(int.MaxValue, null, null, out result) == null;
 
     /// <summary>
     /// Gets this value as the nearest <see cref="float"/>, including infinities and NaN.
     /// </summary>
-    public float ToSingle() => throw new NotImplementedException();
+    public float ToSingle() => specialValue is { } special ? (float)special : NumberParser.ParseSingle(valueText!);
 
     /// <summary>
     /// Gets this value as the nearest <see cref="double"/>, including infinities and NaN.
     /// </summary>
-    public double ToDouble() => throw new NotImplementedException();
+    public double ToDouble() => specialValue ?? NumberParser.ParseDouble(valueText!);
 
     /// <summary>
     /// Gets this value as a <see cref="decimal"/>. Precision beyond what <see cref="decimal"/> can hold is rounded.
     /// </summary>
     /// <exception cref="InvalidOperationException">The value is a special value.</exception>
     /// <exception cref="OverflowException">The value is outside the range of <see cref="decimal"/>.</exception>
-    public decimal ToDecimal() => throw new NotImplementedException();
+    public decimal ToDecimal()
+    {
+        if (IsSpecial)
+        {
+            throw new InvalidOperationException($"Cannot represent {ToKdlString()} as decimal. Use ToDouble() for special values.");
+        }
+
+        return value ??= NumberParser.ParseDecimal(valueText!);
+    }
 
     /// <summary>
     /// Gets this value as a <see cref="decimal"/>, if it's within its range and isn't a special value.
     /// </summary>
-    public bool TryGetDecimal(out decimal result) => throw new NotImplementedException();
+    public bool TryGetDecimal(out decimal result)
+    {
+        result = 0;
+        if (IsSpecial)
+        {
+            return false;
+        }
+
+        try
+        {
+            result = ToDecimal();
+            return true;
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
-    /// Converts this value to a KDL string representation.
+    /// Converts this value to its canonical KDL representation.
     /// </summary>
+    /// <remarks>
+    /// The canonical form is the one the official KDL test suite's expected output uses: hex, octal and binary
+    /// become decimal integers, a leading <c>+</c>, leading zeros and underscores are dropped, a fraction is kept
+    /// as written, and an exponent is written as <c>E</c> with an explicit sign, as in <c>1E+10</c>.
+    /// </remarks>
     /// <returns>The KDL string representation.</returns>
     public override string ToKdlString()
     {
-        // Handle special values first
         if (Format == KdlNumberFormat.Infinity)
         {
             return specialValue < 0 ? "#-inf" : "#inf";
@@ -301,68 +356,36 @@ public sealed class KdlNumber : KdlValue
             return "#nan";
         }
 
-        // Use raw text if available and format-preserving
-        if (RawText != null && Format != KdlNumberFormat.Decimal)
-        {
-            return RawText;
-        }
-
-        return Format switch
-        {
-            KdlNumberFormat.Decimal => FormatDecimal(),
-            KdlNumberFormat.Hexadecimal => TryConvertToInt64() is long hexVal ? $"0x{hexVal:X}" : Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            KdlNumberFormat.Octal => TryConvertToInt64() is long octVal ? $"0o{Convert.ToString(octVal, 8)}" : Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            KdlNumberFormat.Binary => TryConvertToInt64() is long binVal ? $"0b{Convert.ToString(binVal, 2)}" : Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            _ => Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
-        };
+        return canonicalText ??= NumberParser.ToCanonical(valueText!);
     }
 
-    private string FormatDecimal()
+    private BigInteger ToWholeNumber(int maxDigits, BigInteger? min, BigInteger? max)
     {
-        // Beyond decimal's range, the normalized text is still valid KDL
-        return TryGetDecimalValue(out var decimalValue)
-            ? decimalValue.ToString(System.Globalization.CultureInfo.InvariantCulture)
-            : valueText!;
+        var failure = GetWholeNumber(maxDigits, min, max, out var result);
+        if (failure != null)
+        {
+            throw failure;
+        }
+        return result;
     }
 
     /// <summary>
-    /// Gets the value as a decimal, unless this is a special value or a parsed number beyond decimal range.
+    /// Gets the value as a whole number within a range, or the exception explaining why it isn't one.
     /// </summary>
-    internal bool TryGetDecimalValue(out decimal decimalValue)
+    private Exception? GetWholeNumber(int maxDigits, BigInteger? min, BigInteger? max, out BigInteger result)
     {
-        decimalValue = 0;
+        result = BigInteger.Zero;
         if (IsSpecial)
-            return false;
-
-        try
         {
-            decimalValue = Value;
-            return true;
+            return new InvalidOperationException($"{ToKdlString()} isn't a whole number.");
         }
-        catch (OverflowException)
-        {
-            return false;
-        }
-    }
 
-    private long? TryConvertToInt64()
-    {
-        try
+        var failure = NumberParser.ParseWholeNumber(valueText!, maxDigits, out result);
+        if (failure == null && (result < min || result > max))
         {
-            return Convert.ToInt64(Value);
+            failure = new OverflowException($"{ToKdlString()} is outside the range {min} to {max}.");
         }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private decimal ParseFromRawText()
-    {
-        if (valueText == null)
-            throw new InvalidOperationException("Cannot parse number without raw text");
-
-        return NumberParser.ParseDecimal(valueText);
+        return failure;
     }
 
     /// <summary>
@@ -371,18 +394,12 @@ public sealed class KdlNumber : KdlValue
     /// <returns>A new KdlNumber with the same value and format.</returns>
     public override KdlValue Clone()
     {
-        if (IsSpecial)
+        if (specialValue is { } special)
         {
-            return new KdlNumber(specialValue!.Value, Format) { TypeAnnotation = TypeAnnotation };
+            return new KdlNumber(special) { TypeAnnotation = TypeAnnotation };
         }
-        if (valueText != null)
-        {
-            var clone = new KdlNumber(valueText, Format) { TypeAnnotation = TypeAnnotation };
-            if (value.HasValue)
-                clone.value = value;
-            return clone;
-        }
-        return new KdlNumber(value ?? Value, Format) { TypeAnnotation = TypeAnnotation };
+
+        return new KdlNumber(valueText!, Format) { TypeAnnotation = TypeAnnotation, value = this.value };
     }
 }
 
@@ -409,4 +426,3 @@ public enum KdlNumberFormat
     /// <summary>Not-a-number (<c>#nan</c>).</summary>
     NaN
 }
-

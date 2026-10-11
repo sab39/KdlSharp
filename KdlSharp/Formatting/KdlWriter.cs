@@ -298,45 +298,13 @@ public sealed class KdlWriter : IDisposable
 
     private void WriteNumber(KdlNumber num)
     {
-        if (!settings.PreserveNumberFormats || num.Format == KdlNumberFormat.Decimal)
+        if (settings.PreserveNumberFormats && num.Format is KdlNumberFormat.Hexadecimal or KdlNumberFormat.Octal or KdlNumberFormat.Binary)
         {
-            // Handle special values first (they don't have decimal representation)
-            if (num.IsPositiveInfinity)
-            {
-                writer.Write("#inf");
-            }
-            else if (num.IsNegativeInfinity)
-            {
-                writer.Write("#-inf");
-            }
-            else if (num.IsNaN)
-            {
-                writer.Write("#nan");
-            }
-            else if (!num.TryGetDecimalValue(out var value))
-            {
-                // Beyond decimal range: the number's own text representation
-                writer.Write(num.ToKdlString());
-            }
-            else
-            {
-                // Format as decimal, using scientific notation for very large/small numbers
-                var abs = Math.Abs(value);
-                if (abs != 0 && (abs < 0.0001m || abs >= 1e10m))
-                {
-                    // Use scientific notation
-                    var str = value.ToString("E", CultureInfo.InvariantCulture);
-                    writer.Write(str);
-                }
-                else
-                {
-                    writer.Write(value.ToString(CultureInfo.InvariantCulture));
-                }
-            }
+            // The number's own text is in its format
+            writer.Write(num.RawText);
         }
         else
         {
-            // Preserve original format
             writer.Write(num.ToKdlString());
         }
     }
