@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Numerics;
 using System.Text.Json;
 using AwesomeAssertions;
 using KdlSharp;
@@ -285,18 +287,38 @@ public class OfficialTestRunner
         }
     }
 
-    private static bool TryGetDecimal(KdlSharp.Values.KdlNumber number, out decimal value)
+    /// <summary>
+    /// A number's exact value, as a significand and a power of ten with no trailing zeros in the
+    /// significand, so that numbers compare equal exactly when their values are equal, whatever their form.
+    /// </summary>
+    private static (BigInteger Significand, BigInteger Exponent) ExactValue(KdlSharp.Values.KdlNumber number)
     {
-        try
+        // The canonical form is plain decimal digits, with an optional fraction and an 'E' exponent
+        var text = number.ToKdlString();
+        var exponentIndex = text.IndexOf('E');
+        var mantissa = exponentIndex < 0 ? text : text.Substring(0, exponentIndex);
+        var exponent = exponentIndex < 0 ? BigInteger.Zero : BigInteger.Parse(text.Substring(exponentIndex + 1), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+
+        var pointIndex = mantissa.IndexOf('.');
+        if (pointIndex >= 0)
         {
-            value = number.Value;
-            return true;
+            exponent -= mantissa.Length - pointIndex - 1;
+            mantissa = mantissa.Remove(pointIndex, 1);
         }
-        catch (OverflowException)
+
+        var significand = BigInteger.Parse(mantissa, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+        if (significand.IsZero)
         {
-            value = 0;
-            return false;
+            return (BigInteger.Zero, BigInteger.Zero);
         }
+
+        while (significand % 10 == 0)
+        {
+            significand /= 10;
+            exponent++;
+        }
+
+        return (significand, exponent);
     }
 
     /// <summary>
@@ -335,14 +357,9 @@ public class OfficialTestRunner
                     actualNum.IsNegativeInfinity.Should().Be(expectedNum.IsNegativeInfinity, $"at {path} (negative infinity)");
                     actualNum.IsNaN.Should().Be(expectedNum.IsNaN, $"at {path} (NaN)");
                 }
-                else if (TryGetDecimal(actualNum!, out var actualValue) && TryGetDecimal(expectedNum!, out var expectedValue))
-                {
-                    actualValue.Should().BeApproximately(expectedValue, 0.0000001m, $"at {path}");
-                }
                 else
                 {
-                    // Beyond decimal range: compare as doubles
-                    actualNum!.AsDoubleValue().Should().Be(expectedNum!.AsDoubleValue(), $"at {path}");
+                    ExactValue(actualNum!).Should().Be(ExactValue(expectedNum!), $"at {path}");
                 }
                 break;
             case KdlValueType.Boolean:
