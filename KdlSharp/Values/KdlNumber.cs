@@ -31,10 +31,13 @@ public sealed class KdlNumber : KdlValue
     private decimal? value;
     private readonly double? specialValue;
 
-    // The number as text in its format, without underscores; null for special values
-    private readonly string? valueText;
+    // The number as text in its format, without underscores; null for special values, and for a number
+    // constructed from a decimal until ValueText first formats it
+    private string? valueText;
     private string? canonicalText;
     private string? rawText;
+
+    private string ValueText => valueText ??= NumberParser.FormatConstructed(value!.Value.ToString(CultureInfo.InvariantCulture), isFloatingPoint: false);
 
     /// <summary>
     /// Gets the format of this number: as parsed, or as given when it was constructed.
@@ -50,7 +53,7 @@ public sealed class KdlNumber : KdlValue
     /// underscores, and for a constructed one, text generated from its value. Use <see cref="ToKdlString"/>
     /// for the canonical form.
     /// </remarks>
-    public string? RawText => rawText ??= SourceText?.RawText ?? valueText;
+    public string? RawText => rawText ??= SourceText?.RawText ?? (specialValue is null ? ValueText : null);
 
     /// <summary>
     /// Gets whether this number is a special value (infinity or NaN).
@@ -87,11 +90,8 @@ public sealed class KdlNumber : KdlValue
     /// number can be hexadecimal, octal or binary.</param>
     public KdlNumber(decimal value, KdlNumberFormat format = KdlNumberFormat.Decimal)
     {
-        if (format == KdlNumberFormat.Decimal)
-        {
-            valueText = NumberParser.FormatConstructed(value.ToString(CultureInfo.InvariantCulture), isFloatingPoint: false);
-        }
-        else
+        // In decimal format, the text is formatted by ValueText when first needed
+        if (format != KdlNumberFormat.Decimal)
         {
             if (decimal.Truncate(value) != value)
             {
@@ -292,12 +292,12 @@ public sealed class KdlNumber : KdlValue
     /// <summary>
     /// Gets this value as the nearest <see cref="float"/>, including infinities and NaN.
     /// </summary>
-    public float ToSingle() => specialValue is { } special ? (float)special : NumberParser.ParseSingle(valueText!);
+    public float ToSingle() => specialValue is { } special ? (float)special : NumberParser.ParseSingle(ValueText);
 
     /// <summary>
     /// Gets this value as the nearest <see cref="double"/>, including infinities and NaN.
     /// </summary>
-    public double ToDouble() => specialValue ?? NumberParser.ParseDouble(valueText!);
+    public double ToDouble() => specialValue ?? NumberParser.ParseDouble(ValueText);
 
     /// <summary>
     /// Gets this value as a <see cref="decimal"/>. Precision beyond what <see cref="decimal"/> can hold is rounded.
@@ -311,7 +311,7 @@ public sealed class KdlNumber : KdlValue
             throw new InvalidOperationException($"Cannot represent {ToKdlString()} as decimal. Use ToDouble() for special values.");
         }
 
-        return value ??= NumberParser.ParseDecimal(valueText!);
+        return value ??= NumberParser.ParseDecimal(ValueText);
     }
 
     /// <summary>
@@ -356,7 +356,7 @@ public sealed class KdlNumber : KdlValue
             return "#nan";
         }
 
-        return canonicalText ??= NumberParser.ToCanonical(valueText!);
+        return canonicalText ??= NumberParser.ToCanonical(ValueText);
     }
 
     private BigInteger ToWholeNumber(int maxDigits, BigInteger? min, BigInteger? max)
@@ -380,7 +380,7 @@ public sealed class KdlNumber : KdlValue
             return new InvalidOperationException($"{ToKdlString()} isn't a whole number.");
         }
 
-        var failure = NumberParser.ParseWholeNumber(valueText!, maxDigits, out result);
+        var failure = NumberParser.ParseWholeNumber(ValueText, maxDigits, out result);
         if (failure == null && (result < min || result > max))
         {
             failure = new OverflowException($"{ToKdlString()} is outside the range {min} to {max}.");
@@ -399,7 +399,7 @@ public sealed class KdlNumber : KdlValue
             return new KdlNumber(special) { TypeAnnotation = TypeAnnotation };
         }
 
-        return new KdlNumber(valueText!, Format) { TypeAnnotation = TypeAnnotation, value = this.value };
+        return new KdlNumber(ValueText, Format) { TypeAnnotation = TypeAnnotation, value = this.value };
     }
 }
 
