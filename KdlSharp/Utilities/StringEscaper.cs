@@ -8,11 +8,27 @@ internal static class StringEscaper
     /// <summary>
     /// Escapes a string for use in KDL quoted string format.
     /// </summary>
+    /// <exception cref="ArgumentException">The string contains a lone surrogate, which no KDL string can represent.</exception>
     public static string Escape(string value)
     {
         var sb = new System.Text.StringBuilder("\"");
-        foreach (var ch in value)
+        for (int i = 0; i < value.Length; i++)
         {
+            var ch = value[i];
+
+            // A surrogate pair is written as the character itself, since \u{} escapes must be
+            // Unicode scalar values and so can't escape the halves of a pair
+            if (char.IsSurrogate(ch))
+            {
+                if (!char.IsSurrogatePair(value, i))
+                {
+                    throw new ArgumentException($"Lone surrogate U+{(int)ch:X4} at index {i} can't be written as KDL.", nameof(value));
+                }
+                sb.Append(ch).Append(value[i + 1]);
+                i++;
+                continue;
+            }
+
             switch (ch)
             {
                 case '\n':
@@ -196,6 +212,19 @@ internal static class StringEscaper
         for (int i = 1; i < value.Length; i++)
         {
             if (!IsIdentifierContinue(value[i]))
+            {
+                return false;
+            }
+        }
+
+        // Surrogates are allowed character by character, but only as complete pairs
+        for (int i = 0; i < value.Length; i++)
+        {
+            if (char.IsHighSurrogate(value[i]) && char.IsSurrogatePair(value, i))
+            {
+                i++;
+            }
+            else if (char.IsSurrogate(value[i]))
             {
                 return false;
             }

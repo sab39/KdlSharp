@@ -53,7 +53,7 @@ public sealed class KdlWriter : IDisposable
         // Write type annotation
         if (node.TypeAnnotation != null)
         {
-            writer.Write($"({node.TypeAnnotation.TypeName})");
+            WriteTypeAnnotation(node.TypeAnnotation);
         }
 
         // Write node name
@@ -108,7 +108,7 @@ public sealed class KdlWriter : IDisposable
         // Write type annotation
         if (value.TypeAnnotation != null)
         {
-            writer.Write($"({value.TypeAnnotation.TypeName})");
+            WriteTypeAnnotation(value.TypeAnnotation);
         }
 
         switch (value)
@@ -145,7 +145,7 @@ public sealed class KdlWriter : IDisposable
         WriteIndent();
         if (annotation != null)
         {
-            writer.Write($"({annotation.TypeName})");
+            WriteTypeAnnotation(annotation);
         }
         WriteNodeName(name);
     }
@@ -226,27 +226,27 @@ public sealed class KdlWriter : IDisposable
         }
     }
 
-    private void WriteNodeName(string name)
+    private void WriteNodeName(string name) => WriteIdentifierOrString(name);
+
+    private void WritePropertyName(string key) => WriteIdentifierOrString(key);
+
+    private void WriteTypeAnnotation(KdlAnnotation annotation)
     {
-        if (settings.PreferIdentifierStrings && StringEscaper.IsValidIdentifier(name, settings.TargetVersion))
-        {
-            writer.Write(name);
-        }
-        else
-        {
-            writer.Write(StringEscaper.Escape(name));
-        }
+        writer.Write('(');
+        WriteIdentifierOrString(annotation.TypeName);
+        writer.Write(')');
     }
 
-    private void WritePropertyName(string key)
+    // Node names, property keys and type annotations can be any string, written bare where that's valid.
+    private void WriteIdentifierOrString(string text)
     {
-        if (settings.PreferIdentifierStrings && StringEscaper.IsValidIdentifier(key, settings.TargetVersion))
+        if (settings.PreferIdentifierStrings && StringEscaper.IsValidIdentifier(text, settings.TargetVersion))
         {
-            writer.Write(key);
+            writer.Write(text);
         }
         else
         {
-            writer.Write(StringEscaper.Escape(key));
+            writer.Write(StringEscaper.Escape(text));
         }
     }
 
