@@ -429,6 +429,84 @@ public class KdlFormatterTests
         result.Should().Be($"node {ExpectedIdentifierText(value, bare)}\n");
     }
 
+    [Theory]
+    [MemberData(nameof(IdentifierEdgeCases))]
+    public void Serialize_NodeTypeAnnotation_QuotedOnlyWhenNotAValidIdentifier(string typeName, bool bare)
+    {
+        var doc = new KdlDocument();
+        doc.Nodes.Add(new KdlNode("node") { TypeAnnotation = new KdlAnnotation(typeName) });
+
+        var formatter = new KdlFormatter();
+        var result = formatter.Serialize(doc);
+
+        result.Should().Be($"({ExpectedIdentifierText(typeName, bare)})node\n");
+    }
+
+    [Theory]
+    [MemberData(nameof(IdentifierEdgeCases))]
+    public void Serialize_ValueTypeAnnotation_QuotedOnlyWhenNotAValidIdentifier(string typeName, bool bare)
+    {
+        var doc = new KdlDocument();
+        doc.Nodes.Add(new KdlNode("node")
+            .AddArgument(new KdlNumber(1) { TypeAnnotation = new KdlAnnotation(typeName) }));
+
+        var formatter = new KdlFormatter();
+        var result = formatter.Serialize(doc);
+
+        result.Should().Be($"node ({ExpectedIdentifierText(typeName, bare)})1\n");
+    }
+
+    [Theory]
+    [InlineData("", "\"\"")]
+    [InlineData("type/", "\"type/\"")]
+    [InlineData("my type", "\"my type\"")]
+    public void Serialize_TypeAnnotationThatIsNotAnIdentifier_Quoted(string typeName, string expected)
+    {
+        var doc = new KdlDocument();
+        doc.Nodes.Add(new KdlNode("node") { TypeAnnotation = new KdlAnnotation(typeName) }
+            .AddArgument(new KdlNumber(1) { TypeAnnotation = new KdlAnnotation(typeName) })
+            .AddProperty("key", new KdlNumber(2) { TypeAnnotation = new KdlAnnotation(typeName) }));
+
+        var formatter = new KdlFormatter();
+        var result = formatter.Serialize(doc);
+
+        result.Should().Be($"({expected})node ({expected})1 key=({expected})2\n");
+    }
+
+    [Fact]
+    public void Serialize_StringWithCharacterOutsideBmp_WrittenLiterally()
+    {
+        // \u{} escapes must be Unicode scalar values, so a surrogate pair can't be escaped half by half
+        var doc = new KdlDocument();
+        doc.Nodes.Add(new KdlNode("node")
+            .AddArgument("a \U0001F600")
+            .AddArgument("\U0001F600"));
+
+        var formatter = new KdlFormatter();
+        var result = formatter.Serialize(doc);
+
+        result.Should().Be("node \"a \U0001F600\" \U0001F600\n");
+    }
+
+    // The surrogate is passed as a number: test data strings are serialized as UTF-8, which turns
+    // lone surrogates into U+FFFD
+    [Theory]
+    [InlineData("a ", 0xD83D, "")]
+    [InlineData("", 0xD83D, "")]
+    [InlineData("", 0xDE00, "x")]
+    public void Serialize_StringWithLoneSurrogate_Throws(string before, int surrogate, string after)
+    {
+        // A lone surrogate isn't a Unicode scalar value, so no KDL string can represent it
+        var value = before + (char)surrogate + after;
+        var doc = new KdlDocument();
+        doc.Nodes.Add(new KdlNode("node").AddArgument(value));
+
+        var formatter = new KdlFormatter();
+        var action = () => formatter.Serialize(doc);
+
+        action.Should().Throw<ArgumentException>();
+    }
+
     private static string ExpectedIdentifierText(string text, bool bare) => bare ? text : $"\"{text}\"";
 
     [Fact]
