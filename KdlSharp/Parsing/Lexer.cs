@@ -180,30 +180,14 @@ internal sealed class Lexer
 
         var text = tokenBuilder.ToString();
 
-        // Validate that the identifier doesn't look like an invalid number
-        // ".0" is invalid (looks like a number but missing leading digit)
+        // Validate that the identifier doesn't look like a number
+        // ".0" and "+.0n" are invalid in v2 (they look like numbers missing a leading digit)
         // "." or "+." or "-." are valid identifiers (no digits)
-        // "1abc" is invalid (starts with digit)
-        if (text.Length > 0)
+        if (Utilities.StringEscaper.LooksLikeNumber(text, settings.TargetVersion))
         {
-            // If it starts with a digit, it's invalid (should have been parsed as number)
-            if (char.IsDigit(text[0]))
-            {
-                throw new KdlParseException(
-                    $"Invalid identifier '{text}': identifiers cannot start with digits",
-                    startLine, startColumn);
-            }
-
-            // If it starts with +/- or . followed by a digit, it's an invalid number
-            if (text.Length >= 2 && (text[0] == '.' || text[0] == '+' || text[0] == '-'))
-            {
-                if (char.IsDigit(text[1]))
-                {
-                    throw new KdlParseException(
-                        $"Invalid identifier '{text}': identifiers cannot look like numbers",
-                        startLine, startColumn);
-                }
-            }
+            throw new KdlParseException(
+                $"Invalid identifier '{text}': identifiers cannot look like numbers",
+                startLine, startColumn);
         }
 
         // Validate that identifier is followed by valid separator

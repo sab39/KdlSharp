@@ -168,7 +168,7 @@ internal static class StringEscaper
     /// <summary>
     /// Checks if a string can be represented as an identifier (bare, unquoted).
     /// </summary>
-    public static bool IsValidIdentifier(string value)
+    public static bool IsValidIdentifier(string value, KdlVersion version = KdlVersion.V2)
     {
         if (string.IsNullOrEmpty(value))
         {
@@ -177,6 +177,11 @@ internal static class StringEscaper
 
         // Check reserved keywords
         if (IsReservedKeyword(value))
+        {
+            return false;
+        }
+
+        if (LooksLikeNumber(value, version))
         {
             return false;
         }
@@ -197,6 +202,28 @@ internal static class StringEscaper
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Checks if text made of identifier characters starts like a number, and so can't be an identifier.
+    /// </summary>
+    /// <remarks>
+    /// In KDL v2, after an optional sign and then an optional '.', the next character can't be a digit.
+    /// KDL v1 has no rule about '.', so only the sign is skipped. In both, only ASCII digits count.
+    /// </remarks>
+    public static bool LooksLikeNumber(string value, KdlVersion version)
+    {
+        var index = 0;
+        if (index < value.Length && value[index] is '+' or '-')
+        {
+            index++;
+        }
+        if (version != KdlVersion.V1 && index < value.Length && value[index] == '.')
+        {
+            index++;
+        }
+
+        return index < value.Length && value[index] is >= '0' and <= '9';
     }
 
     private static bool IsReservedKeyword(string value)

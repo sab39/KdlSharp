@@ -228,7 +228,7 @@ public sealed class KdlWriter : IDisposable
 
     private void WriteNodeName(string name)
     {
-        if (settings.PreferIdentifierStrings && StringEscaper.IsValidIdentifier(name))
+        if (settings.PreferIdentifierStrings && StringEscaper.IsValidIdentifier(name, settings.TargetVersion))
         {
             writer.Write(name);
         }
@@ -240,7 +240,7 @@ public sealed class KdlWriter : IDisposable
 
     private void WritePropertyName(string key)
     {
-        if (settings.PreferIdentifierStrings && StringEscaper.IsValidIdentifier(key))
+        if (settings.PreferIdentifierStrings && StringEscaper.IsValidIdentifier(key, settings.TargetVersion))
         {
             writer.Write(key);
         }
@@ -250,19 +250,29 @@ public sealed class KdlWriter : IDisposable
         }
     }
 
+    // KDL v1 only allows identifiers as node names and property keys, never as values.
+    private bool CanWriteBareStringValue(string value)
+        => settings.TargetVersion != KdlVersion.V1 && StringEscaper.IsValidIdentifier(value, settings.TargetVersion);
+
     private void WriteString(KdlString str)
     {
         if (!settings.PreserveStringTypes)
         {
-            // Always use quoted strings when not preserving
-            writer.Write(StringEscaper.Escape(str.Value));
+            if (settings.PreferIdentifierStrings && CanWriteBareStringValue(str.Value))
+            {
+                writer.Write(str.Value);
+            }
+            else
+            {
+                writer.Write(StringEscaper.Escape(str.Value));
+            }
             return;
         }
 
         switch (str.StringType)
         {
             case KdlStringType.Identifier:
-                if (StringEscaper.IsValidIdentifier(str.Value))
+                if (CanWriteBareStringValue(str.Value))
                 {
                     writer.Write(str.Value);
                 }
