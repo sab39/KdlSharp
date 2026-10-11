@@ -32,12 +32,6 @@ public sealed class SourcePosition
     public int Length { get; }
 
     /// <summary>
-    /// The full source text this position refers to, kept only when parsing with
-    /// <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
-    /// </summary>
-    private string? FullSourceText { get; }
-
-    /// <summary>
     /// Initializes a new source position.
     /// </summary>
     public SourcePosition(int line, int column, int offset)
@@ -49,23 +43,12 @@ public sealed class SourcePosition
     /// Initializes a new source position with a length.
     /// </summary>
     public SourcePosition(int line, int column, int offset, int length)
-        : this(line, column, offset, length, null)
-    {
-    }
-
-    internal SourcePosition(int line, int column, int offset, int length, string? fullSourceText)
     {
         Line = line;
         Column = column;
         Offset = offset;
         Length = length;
-        FullSourceText = fullSourceText;
     }
-
-    /// <summary>
-    /// Gets the exact source text at this position, or null if the source text wasn't preserved.
-    /// </summary>
-    internal string? GetRawText() => FullSourceText?.Substring(Offset, Length);
 
     /// <summary>
     /// Returns a string representation like "line 10, column 5".

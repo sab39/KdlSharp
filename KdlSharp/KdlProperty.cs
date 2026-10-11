@@ -20,6 +20,21 @@ public sealed class KdlProperty
     public KdlValue Value { get; }
 
     /// <summary>
+    /// Gets the exact source text of the property key, or <c>null</c> unless parsed with
+    /// <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
+    /// </summary>
+    public SourceText? KeySourceText { get; internal set; }
+
+    /// <summary>
+    /// Gets the exact source text of the whole property, or <c>null</c> unless parsed with
+    /// <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
+    /// </summary>
+    /// <remarks>
+    /// Spans from the start of the key to the end of the value, including anything between them.
+    /// </remarks>
+    public SourceText? SourceText { get; internal set; }
+
+    /// <summary>
     /// Initializes a new property with the specified key and value.
     /// </summary>
     /// <param name="key">The property key.</param>

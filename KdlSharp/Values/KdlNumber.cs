@@ -53,7 +53,7 @@ public sealed class KdlNumber : KdlValue
     /// For a number parsed with <see cref="Settings.KdlParserSettings.PreserveSourceText"/>, this is the exact
     /// source text. Otherwise it may be null, or differ from the source text.
     /// </remarks>
-    public string? RawText => rawText ??= SourcePosition?.GetRawText() ?? valueText;
+    public string? RawText => rawText ??= SourceText?.RawText ?? valueText;
 
     private string? rawText;
 

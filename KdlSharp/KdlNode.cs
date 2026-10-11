@@ -82,6 +82,22 @@ public sealed class KdlNode
     public SourcePosition? SourcePosition { get; internal set; }
 
     /// <summary>
+    /// Gets the exact source text of this node's name, excluding any type annotation, or <c>null</c> unless parsed
+    /// with <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
+    /// </summary>
+    public SourceText? SourceText { get; internal set; }
+
+    /// <summary>
+    /// Gets the exact source text of this node's name including its type annotation, or <c>null</c> unless parsed
+    /// with <see cref="Settings.KdlParserSettings.PreserveSourceText"/>. Without an annotation, this is the same as
+    /// <see cref="SourceText"/>.
+    /// </summary>
+    /// <remarks>
+    /// Spans from the annotation's opening parenthesis to the end of the node name, including anything between them.
+    /// </remarks>
+    public SourceText? FullSourceText { get; internal set; }
+
+    /// <summary>
     /// Initializes a new node with the specified name.
     /// </summary>
     /// <param name="name">The node name.</param>

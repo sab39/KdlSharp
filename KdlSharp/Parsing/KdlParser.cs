@@ -341,23 +341,7 @@ public sealed class KdlParser
             throw new KdlParseException($"Maximum nesting depth ({settings.MaxNestingDepth}) exceeded", token.Line, token.Column);
         }
 
-        // Parse optional type annotation
-        KdlAnnotation? typeAnnotation = null;
-        if (token.Type == TokenType.OpenParen)
-        {
-            token = lexer.NextToken();
-            if (token.Type != TokenType.String)
-            {
-                throw new KdlParseException("Expected type name in annotation", token.Line, token.Column);
-            }
-            typeAnnotation = new KdlAnnotation(token.Text!);
-            token = lexer.NextToken();
-            if (token.Type != TokenType.CloseParen)
-            {
-                throw new KdlParseException("Expected ')' after type annotation", token.Line, token.Column);
-            }
-            token = lexer.NextToken();
-        }
+        var typeAnnotation = ParseTypeAnnotation(lexer, ref token);
 
         // Parse node name
         if (token.Type != TokenType.String)
@@ -369,7 +353,8 @@ public sealed class KdlParser
         var node = new KdlNode(nodeName)
         {
             TypeAnnotation = typeAnnotation,
-            SourcePosition = CreatePosition(lexer, token)
+            SourcePosition = CreatePosition(token),
+            SourceText = CreateSourceText(lexer, token)
         };
 
         token = lexer.NextToken();
@@ -431,6 +416,8 @@ public sealed class KdlParser
             if (token.Type == TokenType.String)
             {
                 var possibleKey = token.Text!;
+                var stringPosition = CreatePosition(token);
+                var stringText = CreateSourceText(lexer, token);
                 var nextToken = lexer.NextToken();
 
                 if (nextToken.Type == TokenType.Equals)
@@ -455,7 +442,8 @@ public sealed class KdlParser
                     // It's an argument (string value)
                     // We already consumed the string token, so create the value directly
                     var value = new KdlString(possibleKey, token.StringType, token.RawHashCount, token.IsRawMultiLine, token.RawMultiLineIndent);
-                    value.SourcePosition = CreatePosition(lexer, token);
+                    value.SourcePosition = stringPosition;
+                    value.SourceText = stringText;
                     node.Arguments.Add(value);
                     token = nextToken; // continue with the next token
                 }
@@ -628,23 +616,7 @@ public sealed class KdlParser
 
     private KdlValue ParseValue(Lexer lexer, ref Token token)
     {
-        // Parse optional type annotation
-        KdlAnnotation? typeAnnotation = null;
-        if (token.Type == TokenType.OpenParen)
-        {
-            token = lexer.NextToken();
-            if (token.Type != TokenType.String)
-            {
-                throw new KdlParseException("Expected type name in annotation", token.Line, token.Column);
-            }
-            typeAnnotation = new KdlAnnotation(token.Text!);
-            token = lexer.NextToken();
-            if (token.Type != TokenType.CloseParen)
-            {
-                throw new KdlParseException("Expected ')' after type annotation", token.Line, token.Column);
-            }
-            token = lexer.NextToken();
-        }
+        var typeAnnotation = ParseTypeAnnotation(lexer, ref token);
 
         KdlValue value = token.Type switch
         {
@@ -661,17 +633,51 @@ public sealed class KdlParser
         };
 
         value.TypeAnnotation = typeAnnotation;
-        value.SourcePosition = CreatePosition(lexer, token);
+        value.SourcePosition = CreatePosition(token);
+        value.SourceText = CreateSourceText(lexer, token);
 
         token = lexer.NextToken();
         return value;
     }
 
-
-    private SourcePosition CreatePosition(Lexer lexer, Token token)
+    /// <summary>
+    /// Parses an optional type annotation, leaving the token on whatever follows it.
+    /// </summary>
+    private KdlAnnotation? ParseTypeAnnotation(Lexer lexer, ref Token token)
     {
-        return new SourcePosition(token.Line, token.Column, token.Offset, token.Length,
-            settings.PreserveSourceText ? lexer.Source : null);
+        if (token.Type != TokenType.OpenParen)
+        {
+            return null;
+        }
+
+        token = lexer.NextToken();
+        if (token.Type != TokenType.String)
+        {
+            throw new KdlParseException("Expected type name in annotation", token.Line, token.Column);
+        }
+        var typeName = token.Text!;
+        token = lexer.NextToken();
+        if (token.Type != TokenType.CloseParen)
+        {
+            throw new KdlParseException("Expected ')' after type annotation", token.Line, token.Column);
+        }
+
+        var annotation = new KdlAnnotation(typeName);
+        token = lexer.NextToken();
+        return annotation;
+    }
+
+    private static SourcePosition CreatePosition(Token token)
+    {
+        return new SourcePosition(token.Line, token.Column, token.Offset, token.Length);
+    }
+
+    /// <summary>
+    /// The token's exact source text, kept only when parsing with <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
+    /// </summary>
+    private SourceText? CreateSourceText(Lexer lexer, Token token)
+    {
+        return settings.PreserveSourceText ? new SourceText(lexer.Source, CreatePosition(token)) : null;
     }
 
     private static KdlNumber ParseNumberValue(Token token)

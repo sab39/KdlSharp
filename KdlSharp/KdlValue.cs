@@ -21,6 +21,22 @@ public abstract class KdlValue
     public SourcePosition? SourcePosition { get; internal set; }
 
     /// <summary>
+    /// Gets the exact source text of this value, excluding any type annotation, or <c>null</c> unless parsed with
+    /// <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
+    /// </summary>
+    public SourceText? SourceText { get; internal set; }
+
+    /// <summary>
+    /// Gets the exact source text of this value including its type annotation, or <c>null</c> unless parsed with
+    /// <see cref="Settings.KdlParserSettings.PreserveSourceText"/>. Without an annotation, this is the same as
+    /// <see cref="SourceText"/>.
+    /// </summary>
+    /// <remarks>
+    /// Spans from the annotation's opening parenthesis to the end of the value, including anything between them.
+    /// </remarks>
+    public SourceText? FullSourceText { get; internal set; }
+
+    /// <summary>
     /// Converts this value to a KDL string representation.
     /// </summary>
     public abstract string ToKdlString();

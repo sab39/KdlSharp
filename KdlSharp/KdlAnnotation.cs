@@ -11,6 +11,16 @@ public sealed class KdlAnnotation
     public string TypeName { get; }
 
     /// <summary>
+    /// Gets the exact source text of this annotation, or <c>null</c> unless parsed with
+    /// <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
+    /// </summary>
+    /// <remarks>
+    /// Spans from the opening parenthesis to the closing one, so it's the annotation's source form, such as
+    /// <c>( u8 )</c> or <c>("my type")</c>.
+    /// </remarks>
+    public SourceText? SourceText { get; internal set; }
+
+    /// <summary>
     /// Initializes a new type annotation.
     /// </summary>
     public KdlAnnotation(string typeName)
