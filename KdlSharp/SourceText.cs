@@ -5,49 +5,35 @@ namespace KdlSharp;
 /// </summary>
 /// <remarks>
 /// Only present for elements parsed with <see cref="Settings.KdlParserSettings.PreserveSourceText"/>, and only ever
-/// created by the parser. When present, it's always exactly the text the element was parsed from.
+/// created by the parser, so properties that give one are <c>null</c> otherwise. When present, it's always exactly
+/// the text the element was parsed from. The default value isn't a valid source text.
 /// </remarks>
-public sealed class SourceText
+public readonly struct SourceText
 {
-    private readonly string source;
-    private string? rawText;
+    private readonly ExtendedSourcePosition position;
 
     /// <summary>
     /// Gets the position of this text in the source.
     /// </summary>
-    public SourcePosition Position { get; }
+    public SourcePosition Position => position;
 
     /// <summary>
     /// Gets the exact source text.
     /// </summary>
-    public string RawText => rawText ??= source.Substring(Position.Offset, Position.Length);
+    public string RawText => position.Source.Substring(position.Offset, position.Length);
 
-    internal SourceText(string source, SourcePosition position)
+    internal SourceText(ExtendedSourcePosition position)
     {
-        this.source = source;
-        Position = position;
+        this.position = position;
     }
 
     /// <summary>
     /// Gets the exact source text without allocating a string.
     /// </summary>
-    public ReadOnlySpan<char> AsSpan() => source.AsSpan(Position.Offset, Position.Length);
+    public ReadOnlySpan<char> AsSpan() => position.Source.AsSpan(position.Offset, position.Length);
 
     /// <summary>
     /// Returns the exact source text, <see cref="RawText"/>.
     /// </summary>
     public override string ToString() => RawText;
-
-    /// <summary>
-    /// Creates the text from the start of one source text to the end of another, in the same source.
-    /// </summary>
-    internal static SourceText Span(SourceText start, SourceText end)
-    {
-        var position = new SourcePosition(
-            start.Position.Line,
-            start.Position.Column,
-            start.Position.Offset,
-            end.Position.Offset + end.Position.Length - start.Position.Offset);
-        return new SourceText(start.source, position);
-    }
 }

@@ -350,13 +350,10 @@ public sealed class KdlParser
         }
 
         var nodeName = token.Text!;
-        var nodeText = CreateSourceText(lexer, token);
         var node = new KdlNode(nodeName)
         {
             TypeAnnotation = typeAnnotation,
-            SourcePosition = CreatePosition(token),
-            SourceText = nodeText,
-            FullSourceText = IncludingAnnotation(typeAnnotation, nodeText)
+            SourcePosition = CreatePosition(lexer, token, typeAnnotation)
         };
 
         token = lexer.NextToken();
@@ -417,9 +414,10 @@ public sealed class KdlParser
             // We need to peek ahead to see if this is a property or argument
             if (token.Type == TokenType.String)
             {
+                // The string's position is only created once it's known whether it's a key or an argument,
+                // since a key only needs one for its source text
+                var stringToken = token;
                 var possibleKey = token.Text!;
-                var stringPosition = CreatePosition(token);
-                var stringText = CreateSourceText(lexer, token);
                 var nextToken = lexer.NextToken();
 
                 if (nextToken.Type == TokenType.Equals)
@@ -437,20 +435,16 @@ public sealed class KdlParser
                     // In KDL v2, duplicate properties are allowed with rightmost taking precedence
                     // Always add rather than replace, to preserve all duplicates in the document model.
                     // GetProperty will return the rightmost value per the spec.
-                    node.Properties.Add(new KdlProperty(possibleKey, value)
-                    {
-                        KeySourceText = stringText,
-                        SourceText = stringText is null ? null : SourceText.Span(stringText, value.SourceText!)
-                    });
+                    node.Properties.Add(settings.PreserveSourceText
+                        ? new ParsedKdlProperty(possibleKey, value, CreateExtendedPosition(lexer, stringToken, stringToken, null))
+                        : new KdlProperty(possibleKey, value));
                 }
                 else
                 {
                     // It's an argument (string value)
                     // We already consumed the string token, so create the value directly
                     var value = new KdlString(possibleKey, token.StringType, token.RawHashCount, token.IsRawMultiLine, token.RawMultiLineIndent);
-                    value.SourcePosition = stringPosition;
-                    value.SourceText = stringText;
-                    value.FullSourceText = stringText;
+                    value.SourcePosition = CreatePosition(lexer, stringToken, null);
                     node.Arguments.Add(value);
                     token = nextToken; // continue with the next token
                 }
@@ -625,12 +619,28 @@ public sealed class KdlParser
     {
         var typeAnnotation = ParseTypeAnnotation(lexer, ref token);
 
+        // Unannotated keywords are the shared singletons, which have no source position, unless source text
+        // is kept. Then each is a fresh instance with its own position, so that its source text is available.
+        if (typeAnnotation == null && !settings.PreserveSourceText)
+        {
+            KdlValue? shared = token.Type switch
+            {
+                TokenType.True => KdlBoolean.True,
+                TokenType.False => KdlBoolean.False,
+                TokenType.Null => KdlNull.Instance,
+                _ => null
+            };
+            if (shared != null)
+            {
+                token = lexer.NextToken();
+                return shared;
+            }
+        }
+
         KdlValue value = token.Type switch
         {
             TokenType.String => new KdlString(token.Text!, token.StringType, token.RawHashCount, token.IsRawMultiLine, token.RawMultiLineIndent),
             TokenType.Number => ParseNumberValue(token),
-            // Fresh instances rather than the shared KdlBoolean/KdlNull singletons, since every parsed
-            // value carries its own source position
             TokenType.True => new KdlBoolean(true),
             TokenType.False => new KdlBoolean(false),
             TokenType.Null => new KdlNull(),
@@ -640,9 +650,7 @@ public sealed class KdlParser
         };
 
         value.TypeAnnotation = typeAnnotation;
-        value.SourcePosition = CreatePosition(token);
-        value.SourceText = CreateSourceText(lexer, token);
-        value.FullSourceText = IncludingAnnotation(typeAnnotation, value.SourceText);
+        value.SourcePosition = CreatePosition(lexer, token, typeAnnotation);
 
         token = lexer.NextToken();
         return value;
@@ -671,50 +679,38 @@ public sealed class KdlParser
             throw new KdlParseException("Expected ')' after type annotation", token.Line, token.Column);
         }
 
-        var annotation = new KdlAnnotation(typeName)
+        var annotation = new KdlAnnotation(typeName);
+        if (settings.PreserveSourceText)
         {
-            SourceText = CreateSourceText(lexer, openParen, token)
-        };
+            annotation.Position = CreateExtendedPosition(lexer, openParen, token, null);
+        }
         token = lexer.NextToken();
         return annotation;
     }
 
     /// <summary>
-    /// Extends an element's source text back to the start of its type annotation, if it has one.
-    /// </summary>
-    private static SourceText? IncludingAnnotation(KdlAnnotation? annotation, SourceText? text)
-    {
-        return annotation?.SourceText is { } annotationText && text is not null
-            ? SourceText.Span(annotationText, text)
-            : text;
-    }
-
-    private static SourcePosition CreatePosition(Token token)
-    {
-        return new SourcePosition(token.Line, token.Column, token.Offset, token.Length);
-    }
-
-    /// <summary>
-    /// The token's exact source text, kept only when parsing with <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
-    /// </summary>
-    private SourceText? CreateSourceText(Lexer lexer, Token token)
-    {
-        return CreateSourceText(lexer, token, token);
-    }
-
-    /// <summary>
-    /// The exact source text from the start of one token to the end of another, kept only when parsing with
+    /// The token's position: an extended one, which keeps what's needed for its source text, only when parsing with
     /// <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
     /// </summary>
-    private SourceText? CreateSourceText(Lexer lexer, Token start, Token end)
+    private SourcePosition CreatePosition(Lexer lexer, Token token, KdlAnnotation? annotation)
     {
-        if (!settings.PreserveSourceText)
-        {
-            return null;
-        }
+        return settings.PreserveSourceText
+            ? CreateExtendedPosition(lexer, token, token, annotation)
+            : new SourcePosition(token.Line, token.Column, token.Offset, token.Length);
+    }
 
-        var position = new SourcePosition(start.Line, start.Column, start.Offset, end.Offset + end.Length - start.Offset);
-        return new SourceText(lexer.Source, position);
+    /// <summary>
+    /// The extended position from the start of one token to the end of another.
+    /// </summary>
+    private static ExtendedSourcePosition CreateExtendedPosition(Lexer lexer, Token start, Token end, KdlAnnotation? annotation)
+    {
+        return new ExtendedSourcePosition(
+            lexer.Source,
+            start.Line,
+            start.Column,
+            start.Offset,
+            end.Offset + end.Length - start.Offset,
+            annotation?.Position);
     }
 
     private static KdlNumber ParseNumberValue(Token token)

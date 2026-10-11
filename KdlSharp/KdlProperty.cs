@@ -7,7 +7,7 @@ namespace KdlSharp;
 /// Properties are ordered and can have duplicate keys.
 /// When duplicate keys exist, the rightmost value takes precedence per KDL specification.
 /// </remarks>
-public sealed class KdlProperty
+public class KdlProperty
 {
     /// <summary>
     /// Gets the property key.
@@ -23,7 +23,7 @@ public sealed class KdlProperty
     /// Gets the exact source text of the property key, or <c>null</c> unless parsed with
     /// <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
     /// </summary>
-    public SourceText? KeySourceText { get; internal set; }
+    public SourceText? KeySourceText => ExtendedSourcePosition.TextOf((this as ParsedKdlProperty)?.KeyPosition);
 
     /// <summary>
     /// Gets the exact source text of the whole property, or <c>null</c> unless parsed with
@@ -32,7 +32,10 @@ public sealed class KdlProperty
     /// <remarks>
     /// Spans from the start of the key to the end of the value, including anything between them.
     /// </remarks>
-    public SourceText? SourceText { get; internal set; }
+    public SourceText? SourceText
+        => this is ParsedKdlProperty { KeyPosition: var key } && Value.SourcePosition is ExtendedSourcePosition value
+            ? new SourceText(ExtendedSourcePosition.Span(key, value))
+            : null;
 
     /// <summary>
     /// Initializes a new property with the specified key and value.

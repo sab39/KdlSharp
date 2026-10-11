@@ -6,7 +6,7 @@ namespace KdlSharp;
 /// <remarks>
 /// Used for error reporting and source mapping. Only present for parsed nodes, not programmatically constructed ones.
 /// </remarks>
-public sealed class SourcePosition
+public class SourcePosition
 {
     /// <summary>
     /// Gets the line number (1-indexed).

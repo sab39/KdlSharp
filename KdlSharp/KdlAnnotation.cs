@@ -18,7 +18,13 @@ public sealed class KdlAnnotation
     /// Spans from the opening parenthesis to the closing one, so it's the annotation's source form, such as
     /// <c>( u8 )</c> or <c>("my type")</c>.
     /// </remarks>
-    public SourceText? SourceText { get; internal set; }
+    public SourceText? SourceText => ExtendedSourcePosition.TextOf(Position);
+
+    /// <summary>
+    /// The annotation's position, parentheses included, only when parsed with
+    /// <see cref="Settings.KdlParserSettings.PreserveSourceText"/>.
+    /// </summary>
+    internal ExtendedSourcePosition? Position { get; set; }
 
     /// <summary>
     /// Initializes a new type annotation.
