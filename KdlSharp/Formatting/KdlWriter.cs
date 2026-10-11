@@ -240,49 +240,43 @@ public sealed class KdlWriter : IDisposable
     // Node names, property keys and type annotations can be any string, written bare where that's valid.
     private void WriteIdentifierOrString(string text)
     {
-        if (settings.PreferIdentifierStrings && StringEscaper.IsValidIdentifier(text, settings.TargetVersion))
+        WriteBareOrQuoted(text, settings.PreferIdentifierStrings ? StringEscaper.FindNonIdentifierIndex(text, settings.TargetVersion) : 0);
+    }
+
+    // KDL v1 only allows identifiers as node names and property keys, never as values. Gives what
+    // StringEscaper.FindNonIdentifierIndex does, so -1 if the value can be written bare.
+    private int FindNonIdentifierIndexInValue(string value)
+        => settings.TargetVersion == KdlVersion.V1 ? 0 : StringEscaper.FindNonIdentifierIndex(value, settings.TargetVersion);
+
+    // Writes the text bare if nonIdentifierIndex is -1, and quoted otherwise. The escaping can start from
+    // nonIdentifierIndex, since nothing before it has to be escaped.
+    private void WriteBareOrQuoted(string text, int nonIdentifierIndex)
+    {
+        if (nonIdentifierIndex < 0)
         {
             writer.Write(text);
         }
         else
         {
-            writer.Write(StringEscaper.Escape(text));
+            StringEscaper.WriteQuoted(writer, text, nonIdentifierIndex);
         }
     }
-
-    // KDL v1 only allows identifiers as node names and property keys, never as values.
-    private bool CanWriteBareStringValue(string value)
-        => settings.TargetVersion != KdlVersion.V1 && StringEscaper.IsValidIdentifier(value, settings.TargetVersion);
 
     private void WriteString(KdlString str)
     {
         if (!settings.PreserveStringTypes)
         {
-            if (settings.PreferIdentifierStrings && CanWriteBareStringValue(str.Value))
-            {
-                writer.Write(str.Value);
-            }
-            else
-            {
-                writer.Write(StringEscaper.Escape(str.Value));
-            }
+            WriteBareOrQuoted(str.Value, settings.PreferIdentifierStrings ? FindNonIdentifierIndexInValue(str.Value) : 0);
             return;
         }
 
         switch (str.StringType)
         {
             case KdlStringType.Identifier:
-                if (CanWriteBareStringValue(str.Value))
-                {
-                    writer.Write(str.Value);
-                }
-                else
-                {
-                    writer.Write(StringEscaper.Escape(str.Value));
-                }
+                WriteBareOrQuoted(str.Value, FindNonIdentifierIndexInValue(str.Value));
                 break;
             case KdlStringType.Quoted:
-                writer.Write(StringEscaper.Escape(str.Value));
+                StringEscaper.WriteQuoted(writer, str.Value, 0);
                 break;
             case KdlStringType.MultiLine:
                 writer.Write($"\"\"\"{str.Value}\"\"\"");
@@ -291,7 +285,7 @@ public sealed class KdlWriter : IDisposable
                 WriteRawString(str);
                 break;
             default:
-                writer.Write(StringEscaper.Escape(str.Value));
+                StringEscaper.WriteQuoted(writer, str.Value, 0);
                 break;
         }
     }
