@@ -30,7 +30,7 @@ public class KdlFormatterTests
         var formatter = new KdlFormatter();
         var result = formatter.Serialize(doc);
 
-        result.Should().Be("node \"value\"\n");
+        result.Should().Be("node value\n");
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class KdlFormatterTests
         var formatter = new KdlFormatter();
         var result = formatter.Serialize(doc);
 
-        result.Should().Be("node key=\"value\"\n");
+        result.Should().Be("node key=value\n");
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public class KdlFormatterTests
         var formatter = new KdlFormatter();
         var result = formatter.Serialize(doc);
 
-        result.Should().Be("node (mytype)\"test\"\n");
+        result.Should().Be("node (mytype)test\n");
     }
 
     [Fact]
@@ -365,6 +365,72 @@ public class KdlFormatterTests
         result.Should().Contain("\"node with spaces\"");
     }
 
+    // Per the spec's identifier-string grammar, after an optional sign and then an optional '.',
+    // the next character can't be a digit, or the text would read as a number.
+    public static TheoryData<string, bool> IdentifierEdgeCases => new()
+    {
+        { "1x", false },
+        { "-1", false },
+        { "+1", false },
+        { ".5", false },
+        { "-.5", false },
+        { "+.5", false },
+        { "-", true },
+        { "+", true },
+        { ".", true },
+        { "-.", true },
+        { "+.", true },
+        { "-x", true },
+        { ".x", true },
+        { "--1", true },
+        { ".-1", true },
+        // The spec's digit is ASCII only, so other Unicode digits don't make the text number-like.
+        { "٣x", true },
+    };
+
+    [Theory]
+    [MemberData(nameof(IdentifierEdgeCases))]
+    public void Serialize_NodeName_QuotedOnlyWhenNotAValidIdentifier(string name, bool bare)
+    {
+        var doc = new KdlDocument();
+        doc.Nodes.Add(new KdlNode(name));
+
+        var formatter = new KdlFormatter();
+        var result = formatter.Serialize(doc);
+
+        result.Should().Be($"{ExpectedIdentifierText(name, bare)}\n");
+    }
+
+    [Theory]
+    [MemberData(nameof(IdentifierEdgeCases))]
+    public void Serialize_PropertyKey_QuotedOnlyWhenNotAValidIdentifier(string key, bool bare)
+    {
+        var doc = new KdlDocument();
+        doc.Nodes.Add(new KdlNode("node").AddProperty(key, new KdlNumber(1)));
+
+        var formatter = new KdlFormatter();
+        var result = formatter.Serialize(doc);
+
+        result.Should().Be($"node {ExpectedIdentifierText(key, bare)}=1\n");
+    }
+
+    [Theory]
+    [MemberData(nameof(IdentifierEdgeCases))]
+    public void Serialize_PreserveStringTypes_IdentifierString_QuotedOnlyWhenNotAValidIdentifier(string value, bool bare)
+    {
+        var doc = new KdlDocument();
+        doc.Nodes.Add(new KdlNode("node")
+            .AddArgument(new KdlString(value, KdlStringType.Identifier)));
+
+        var settings = new KdlFormatterSettings { PreserveStringTypes = true };
+        var formatter = new KdlFormatter(settings);
+        var result = formatter.Serialize(doc);
+
+        result.Should().Be($"node {ExpectedIdentifierText(value, bare)}\n");
+    }
+
+    private static string ExpectedIdentifierText(string text, bool bare) => bare ? text : $"\"{text}\"";
+
     [Fact]
     public void Serialize_CRLFNewline_UsesWindowsLineEndings()
     {
@@ -410,8 +476,8 @@ public class KdlFormatterTests
         var formatter = new KdlFormatter();
         var result = formatter.Serialize(doc);
 
-        result.Should().Contain("server \"main\"");
-        result.Should().Contain("host=\"localhost\"");
+        result.Should().Contain("server main");
+        result.Should().Contain("host=localhost");
         result.Should().Contain("port=8080");
         result.Should().Contain("database");
         result.Should().Contain("connection=\"postgres://localhost/mydb\"");
@@ -453,7 +519,7 @@ public class KdlFormatterTests
         var formatter = new KdlFormatter(settings);
         var result = formatter.Serialize(doc);
 
-        result.Should().Be("node key=\"simplevalue\"\n");
+        result.Should().Be("node key=simplevalue\n");
     }
 
     [Fact]
@@ -466,8 +532,41 @@ public class KdlFormatterTests
         var formatter = new KdlFormatter(settings);
         var result = formatter.Serialize(doc);
 
-        result.Should().Contain("\"mynode\"");
-        result.Should().Contain("\"mykey\"");
+        result.Should().Be("\"mynode\" \"mykey\"=\"myvalue\"\n");
+    }
+
+    [Theory]
+    [MemberData(nameof(IdentifierEdgeCases))]
+    public void Serialize_PreferIdentifierStrings_String_QuotedOnlyWhenNotAValidIdentifier(string value, bool bare)
+    {
+        var doc = new KdlDocument();
+        doc.Nodes.Add(new KdlNode("node").AddArgument(value));
+
+        var settings = new KdlFormatterSettings { PreferIdentifierStrings = true };
+        var formatter = new KdlFormatter(settings);
+        var result = formatter.Serialize(doc);
+
+        result.Should().Be($"node {ExpectedIdentifierText(value, bare)}\n");
+    }
+
+    [Fact]
+    public void Serialize_PreferIdentifierStrings_TargetVersionV1_StringValuesQuoted()
+    {
+        // KDL v1 allows identifiers as node names and property keys, but not as values
+        var doc = new KdlDocument();
+        doc.Nodes.Add(new KdlNode("node")
+            .AddArgument("argument")
+            .AddArgument(new KdlString("identifier", KdlStringType.Identifier))
+            .AddProperty("key", "value"));
+
+        var settings = new KdlFormatterSettings { PreferIdentifierStrings = true, TargetVersion = KdlVersion.V1 };
+        var formatter = new KdlFormatter(settings);
+        var result = formatter.Serialize(doc);
+
+        result.Should().Be("node \"argument\" \"identifier\" key=\"value\"\n");
+
+        var preservingSettings = new KdlFormatterSettings { PreserveStringTypes = true, TargetVersion = KdlVersion.V1 };
+        new KdlFormatter(preservingSettings).Serialize(doc).Should().Be(result);
     }
 
     [Fact]

@@ -45,14 +45,14 @@ public class KdlWriterTests
     }
 
     [Fact]
-    public void WriteValue_String_QuotedOutput()
+    public void WriteValue_String_BareWhenValidIdentifier()
     {
         using var stringWriter = new StringWriter();
         using var writer = new KdlWriter(stringWriter);
 
         writer.WriteValue(new KdlString("hello"));
 
-        stringWriter.ToString().Should().Be("\"hello\"");
+        stringWriter.ToString().Should().Be("hello");
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class KdlWriterTests
         var value = new KdlString("test") { TypeAnnotation = new KdlAnnotation("date") };
         writer.WriteValue(value);
 
-        stringWriter.ToString().Should().Be("(date)\"test\"");
+        stringWriter.ToString().Should().Be("(date)test");
     }
 
     [Fact]
@@ -157,7 +157,7 @@ public class KdlWriterTests
         writer.WriteArgument(new KdlString("arg1"));
         writer.WriteEndNode();
 
-        stringWriter.ToString().Should().Be("node \"arg1\"\n");
+        stringWriter.ToString().Should().Be("node arg1\n");
     }
 
     [Fact]
@@ -171,7 +171,7 @@ public class KdlWriterTests
         writer.WriteArgument(new KdlNumber(42));
         writer.WriteEndNode();
 
-        stringWriter.ToString().Should().Be("node \"arg1\" 42\n");
+        stringWriter.ToString().Should().Be("node arg1 42\n");
     }
 
     [Fact]
@@ -184,7 +184,7 @@ public class KdlWriterTests
         writer.WriteProperty("key", new KdlString("value"));
         writer.WriteEndNode();
 
-        stringWriter.ToString().Should().Be("node key=\"value\"\n");
+        stringWriter.ToString().Should().Be("node key=value\n");
     }
 
     [Fact]
@@ -298,7 +298,7 @@ public class KdlWriterTests
         var result = stringWriter.ToString();
         var typeIdx = result.IndexOf("(type)");
         var nodeIdx = result.IndexOf("node");
-        var argIdx = result.IndexOf("\"arg\"");
+        var argIdx = result.IndexOf(" arg");
         var propIdx = result.IndexOf("key=");
         var childIdx = result.IndexOf("child");
 

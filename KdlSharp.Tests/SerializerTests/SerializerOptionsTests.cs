@@ -217,8 +217,8 @@ public class SerializerOptionsTests
 
         // With UseArgumentsForSimpleValues=true and Position attributes, values should be arguments
         // Arguments don't have = in them
-        kdl.Should().Contain("\"first\"");
-        kdl.Should().Contain("\"second\"");
+        kdl.Should().Contain(" first");
+        kdl.Should().Contain(" second");
     }
 
     [Fact]

@@ -110,7 +110,7 @@ public class PocoRoundTripTests
         var kdl = serializer.Serialize(data);
 
         // Position attributes should serialize as arguments, not properties
-        kdl.Should().Contain("\"Hello\"");
+        kdl.Should().Contain(" Hello");
         kdl.Should().Contain("123");
         // Regular property should be serialized as key=value
         kdl.Should().Contain("regular-property=");
