@@ -178,6 +178,12 @@ internal static class StringEscaper
         {
             return true;
         }
+        // Zero-width non-breaking space, or BOM: U+FEFF. A file's BOM is removed when the file is read, so it
+        // isn't allowed anywhere in the text that's parsed or written.
+        if (code == 0xFEFF)
+        {
+            return true;
+        }
         return false;
     }
 

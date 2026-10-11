@@ -30,11 +30,8 @@ internal sealed class Lexer
         line = 1;
         column = 1;
 
-        // Skip BOM if present
-        if (this.source.Length > 0 && this.source[0] == '\uFEFF')
-        {
-            Advance();
-        }
+        // There's no BOM to skip: a file's BOM is removed when the file is read, as KdlDocument.ParseFile and
+        // ParseStream do, so in the text itself U+FEFF is disallowed everywhere
     }
 
     /// <summary>
@@ -63,10 +60,9 @@ internal sealed class Lexer
         var startColumn = column;
         var ch = Peek();
 
-        // BOM is only allowed at the very start of the file (already handled in constructor)
         if (ch == '\uFEFF')
         {
-            throw new KdlParseException("BOM (U+FEFF) is only allowed at the start of the file", line, column);
+            throw new KdlParseException("BOM (U+FEFF) isn't allowed in KDL text; a file's BOM is removed when the file is read", line, column);
         }
 
         // Check for multi-character tokens first
@@ -1261,11 +1257,33 @@ internal sealed class Lexer
             return;
         }
 
-        if (IsNewline(source[position]))
+        // Printable ASCII, the common case, can't be a newline or a disallowed code point
+        var ch = source[position];
+        if ((uint)(ch - 0x20) >= 0x5F)
+        {
+            AdvanceOutsidePrintableAscii(ch);
+            return;
+        }
+
+        column++;
+        position++;
+    }
+
+    // Kept out of Advance so that it stays small
+    private void AdvanceOutsidePrintableAscii(char ch)
+    {
+        // Disallowed code points can't appear literally anywhere in the document, strings and comments included.
+        // Surrogates are left to the checks that know whether they're paired.
+        if (!char.IsSurrogate(ch) && Utilities.StringEscaper.IsDisallowedChar(ch))
+        {
+            throw new KdlParseException($"Disallowed code point U+{(int)ch:X4}", line, column);
+        }
+
+        if (IsNewline(ch))
         {
             line++;
             column = 1;
-            if (source[position] == '\r' && position + 1 < source.Length && source[position + 1] == '\n')
+            if (ch == '\r' && position + 1 < source.Length && source[position + 1] == '\n')
             {
                 position++;
             }
