@@ -193,6 +193,52 @@ public class OfficialTestRunner
         }
     }
 
+    /// <summary>
+    /// Writing a parsed document and parsing the result gives the same document. This checks that the
+    /// formatter writes back something that parses to the same values, without prescribing what form
+    /// the output takes. The expected file is checked too, unless it's identical to the input.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(GetTestCases))]
+    public void RoundTripOfficialTest(string testName, string inputFile, string expectedFile, bool shouldFail, bool hasExpected)
+    {
+        if (testDataPath == null)
+            Assert.Fail("specs submodule not initialized. Run: git submodule update --init --recursive");
+
+        if (shouldFail || GetTestVersion(testName) == "v1")
+            return;
+
+        var inputKdl = File.ReadAllText(inputFile);
+        AssertRoundTrips(inputKdl, $"{testName} (input)");
+
+        if (hasExpected)
+        {
+            var expectedKdl = File.ReadAllText(expectedFile);
+            if (expectedKdl != inputKdl)
+                AssertRoundTrips(expectedKdl, $"{testName} (expected)");
+        }
+    }
+
+    private void AssertRoundTrips(string kdl, string testName)
+    {
+        var original = KdlDocument.Parse(kdl);
+        var written = original.ToKdlString();
+        output.WriteLine($"{testName} written as:{Environment.NewLine}{written}");
+
+        KdlDocument reparsed;
+        try
+        {
+            reparsed = KdlDocument.Parse(written);
+        }
+        catch (Exceptions.KdlParseException ex)
+        {
+            Assert.Fail($"Test {testName} wrote KDL that doesn't parse ({ex.Message}):{Environment.NewLine}{written}");
+            return;
+        }
+
+        CompareDocuments(reparsed, original, $"{testName} round trip");
+    }
+
     private void CompareDocuments(KdlDocument actual, KdlDocument expected, string testName)
     {
         actual.Nodes.Should().HaveCount(expected.Nodes.Count,
