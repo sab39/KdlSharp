@@ -1,3 +1,4 @@
+using System.Numerics;
 using KdlSharp.Utilities;
 
 namespace KdlSharp.Values;
@@ -97,6 +98,64 @@ public sealed class KdlNumber : KdlValue
     }
 
     /// <summary>
+    /// Initializes a new integer value.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <param name="format">The format to write the number in when number formats are preserved.</param>
+    public KdlNumber(int value, KdlNumberFormat format = KdlNumberFormat.Decimal)
+        : this(new BigInteger(value), format)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new integer value.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <param name="format">The format to write the number in when number formats are preserved.</param>
+    public KdlNumber(long value, KdlNumberFormat format = KdlNumberFormat.Decimal)
+        : this(new BigInteger(value), format)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new integer value.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <param name="format">The format to write the number in when number formats are preserved.</param>
+    public KdlNumber(ulong value, KdlNumberFormat format = KdlNumberFormat.Decimal)
+        : this(new BigInteger(value), format)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new integer value of any size.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    /// <param name="format">The format to write the number in when number formats are preserved.</param>
+    public KdlNumber(BigInteger value, KdlNumberFormat format = KdlNumberFormat.Decimal)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Initializes a new floating-point value. Infinities and NaN become <c>#inf</c>, <c>#-inf</c> and <c>#nan</c>.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    public KdlNumber(float value)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Initializes a new floating-point value. Infinities and NaN become <c>#inf</c>, <c>#-inf</c> and <c>#nan</c>.
+    /// </summary>
+    /// <param name="value">The value.</param>
+    public KdlNumber(double value)
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
     /// Initializes a new number value from normalized number text, as produced by the lexer.
     /// </summary>
     internal KdlNumber(string rawText, KdlNumberFormat format)
@@ -156,6 +215,75 @@ public sealed class KdlNumber : KdlValue
             return NumberParser.ParseDouble(valueText);
         return (double)Value;
     }
+
+    /// <summary>
+    /// Gets this value as an <see cref="int"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The value isn't a whole number, or is a special value.</exception>
+    /// <exception cref="OverflowException">The value is outside the range of <see cref="int"/>.</exception>
+    public int ToInt32() => throw new NotImplementedException();
+
+    /// <summary>
+    /// Gets this value as an <see cref="int"/>, if it's a whole number within its range.
+    /// </summary>
+    public bool TryGetInt32(out int result) => throw new NotImplementedException();
+
+    /// <summary>
+    /// Gets this value as a <see cref="long"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The value isn't a whole number, or is a special value.</exception>
+    /// <exception cref="OverflowException">The value is outside the range of <see cref="long"/>.</exception>
+    public long ToInt64() => throw new NotImplementedException();
+
+    /// <summary>
+    /// Gets this value as a <see cref="long"/>, if it's a whole number within its range.
+    /// </summary>
+    public bool TryGetInt64(out long result) => throw new NotImplementedException();
+
+    /// <summary>
+    /// Gets this value as a <see cref="ulong"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The value isn't a whole number, or is a special value.</exception>
+    /// <exception cref="OverflowException">The value is outside the range of <see cref="ulong"/>.</exception>
+    public ulong ToUInt64() => throw new NotImplementedException();
+
+    /// <summary>
+    /// Gets this value as a <see cref="ulong"/>, if it's a whole number within its range.
+    /// </summary>
+    public bool TryGetUInt64(out ulong result) => throw new NotImplementedException();
+
+    /// <summary>
+    /// Gets this value as a <see cref="BigInteger"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The value isn't a whole number, or is a special value.</exception>
+    public BigInteger ToBigInteger() => throw new NotImplementedException();
+
+    /// <summary>
+    /// Gets this value as a <see cref="BigInteger"/>, if it's a whole number.
+    /// </summary>
+    public bool TryGetBigInteger(out BigInteger result) => throw new NotImplementedException();
+
+    /// <summary>
+    /// Gets this value as the nearest <see cref="float"/>, including infinities and NaN.
+    /// </summary>
+    public float ToSingle() => throw new NotImplementedException();
+
+    /// <summary>
+    /// Gets this value as the nearest <see cref="double"/>, including infinities and NaN.
+    /// </summary>
+    public double ToDouble() => throw new NotImplementedException();
+
+    /// <summary>
+    /// Gets this value as a <see cref="decimal"/>. Precision beyond what <see cref="decimal"/> can hold is rounded.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The value is a special value.</exception>
+    /// <exception cref="OverflowException">The value is outside the range of <see cref="decimal"/>.</exception>
+    public decimal ToDecimal() => throw new NotImplementedException();
+
+    /// <summary>
+    /// Gets this value as a <see cref="decimal"/>, if it's within its range and isn't a special value.
+    /// </summary>
+    public bool TryGetDecimal(out decimal result) => throw new NotImplementedException();
 
     /// <summary>
     /// Converts this value to a KDL string representation.
